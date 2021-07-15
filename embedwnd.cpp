@@ -1,11 +1,15 @@
 #include <windows.h>
 #include <strsafe.h>
 #include "embedwnd.h"
+#include <winamp/wa_cup.h>
+#include <loader/loader/utils.h>
+#include <loader/loader/ini.h>
 
 // internal variables
 HMENU main_menu = 0, windows_menu = 0;
 int height = 0, width = 0;
-BOOL visible = FALSE, old_visible = FALSE;
+BOOL visible = FALSE, old_visible = FALSE,
+	 self_update = FALSE;
 RECT initial[2] = {0};
 
 HWND CreateEmbeddedWindow(embedWindowState* embedWindow, const GUID embedWindowGUID)
@@ -18,45 +22,37 @@ HWND CreateEmbeddedWindow(embedWindowState* embedWindow, const GUID embedWindowG
 	// position of the embedded window when it is created saving addtional handling
 	//
 	// how you store the settings is down to you, this example uses winamp.ini for ease
-	embedWindow->r.left = GetPrivateProfileInt(INI_FILE_SECTION, L"config_x", -1, ini_file);
-	embedWindow->r.top = GetPrivateProfileInt(INI_FILE_SECTION, L"config_y", -1, ini_file);
+	embedWindow->r.left = GetNativeIniInt(WINAMP_INI, INI_FILE_SECTION, L"config_x", 0);
+	embedWindow->r.top = GetNativeIniInt(WINAMP_INI, INI_FILE_SECTION, L"config_y", 348);
 
-	if (embedWindow->r.left == -1 || embedWindow->r.top == -1)
-	{
-		RECT r = {0};
-		GetWindowRect(plugin.hwndParent, &r);
-		embedWindow->r.left = r.left;
-		embedWindow->r.top = r.bottom;
-	}
-	
 	//TODO map from the old values?
-	int right = GetPrivateProfileInt(INI_FILE_SECTION, L"wnd_right", -1, ini_file);
-	int bottom = GetPrivateProfileInt(INI_FILE_SECTION, L"wnd_bottom", -1, ini_file);
+	const int right = GetNativeIniInt(WINAMP_INI, INI_FILE_SECTION, L"wnd_right", -1),
+			  bottom = GetNativeIniInt(WINAMP_INI, INI_FILE_SECTION, L"wnd_bottom", -1);
 
 	if (right != -1)
 	{
 		embedWindow->r.right = right;
-		WritePrivateProfileString(INI_FILE_SECTION, L"wnd_right", 0, ini_file);
+		SaveNativeIniString(WINAMP_INI, INI_FILE_SECTION, L"wnd_right", 0);
 	}
 	else
 	{
-		embedWindow->r.right = embedWindow->r.left + GetPrivateProfileInt(INI_FILE_SECTION, L"config_width", 275, ini_file);
+		embedWindow->r.right = embedWindow->r.left + GetNativeIniInt(WINAMP_INI, INI_FILE_SECTION, L"config_width", 275);
 	}
 
 	if (bottom != -1)
 	{
 		embedWindow->r.bottom = bottom;
-		WritePrivateProfileString(INI_FILE_SECTION, L"wnd_bottom", 0, ini_file);
+		SaveNativeIniString(WINAMP_INI, INI_FILE_SECTION, L"wnd_bottom", 0);
 	}
 	else
 	{
-		embedWindow->r.bottom = embedWindow->r.top + GetPrivateProfileInt(INI_FILE_SECTION, L"config_height", 116, ini_file);
+		embedWindow->r.bottom = embedWindow->r.top + GetNativeIniInt(WINAMP_INI, INI_FILE_SECTION, L"config_height", 87);
 	}
 
 	CopyRect(&initial[0], &embedWindow->r);
 
-	initial[1].top = height = GetPrivateProfileInt(INI_FILE_SECTION, L"ff_height", height, ini_file);
-	initial[1].left = width = GetPrivateProfileInt(INI_FILE_SECTION, L"ff_width", width, ini_file);
+	initial[1].top = height = GetNativeIniInt(WINAMP_INI, INI_FILE_SECTION, L"ff_height", height);
+	initial[1].left = width = GetNativeIniInt(WINAMP_INI, INI_FILE_SECTION, L"ff_width", width);
 
 	// specifying this will prevent the modern skin engine (gen_ff) from adding a menu entry
 	// to the main right-click menu. this is useful if you want to add your own menu item so
@@ -64,71 +60,34 @@ HWND CreateEmbeddedWindow(embedWindowState* embedWindow, const GUID embedWindowG
 	embedWindow->flags |= EMBED_FLAGS_NOWINDOWMENU;
 
 	// now we have set up the embedWindowState structure, we pass it to Winamp to create
-	HWND frame = (HWND)SendMessage(plugin.hwndParent, WM_WA_IPC, (WPARAM)embedWindow, IPC_GET_EMBEDIF);
-
-	// this needs to be called so the created window will be processed in the Ctrl+Tab loop
-	WASABI_API_APP->app_registerGlobalWindow(frame);
-
-	return frame;
-}
-
-BOOL WritePrivateProfileInt(LPCWSTR lpAppName, LPCWSTR lpKeyName, int value, LPCWSTR lpFileName)
-{
-	WCHAR string[32] = {0};
-	StringCchPrintf(string, 32, L"%d", value);
-	return WritePrivateProfileString(INI_FILE_SECTION, lpKeyName, string, ini_file);
+	return plugin.createembed(embedWindow);
 }
 
 void DestroyEmbeddedWindow(embedWindowState* embedWindow)
 {
-	if (!EqualRect(&initial[0], &embedWindow->r))
+	// unless we're closing as a classic skin then we'll
+	// skip saving the current window position otherwise
+	// we have the issue with windows being in the wrong
+	// places after modern -> exit -> modern -> classic
+	if (!embedWindow->wasabi_window &&
+		!EqualRect(&initial[0], &embedWindow->r))
 	{
-		WritePrivateProfileInt(INI_FILE_SECTION, L"config_x", embedWindow->r.left, ini_file);
-		WritePrivateProfileInt(INI_FILE_SECTION, L"config_y", embedWindow->r.top, ini_file);
-		WritePrivateProfileInt(INI_FILE_SECTION, L"config_width", embedWindow->r.right - embedWindow->r.left, ini_file);
-		WritePrivateProfileInt(INI_FILE_SECTION, L"config_height", embedWindow->r.bottom - embedWindow->r.top, ini_file);
+		SaveNativeIniInt(WINAMP_INI, INI_FILE_SECTION, L"config_x", embedWindow->r.left);
+		SaveNativeIniInt(WINAMP_INI, INI_FILE_SECTION, L"config_y", embedWindow->r.top);
+		SaveNativeIniInt(WINAMP_INI, INI_FILE_SECTION, L"config_width", embedWindow->r.right - embedWindow->r.left);
+		SaveNativeIniInt(WINAMP_INI, INI_FILE_SECTION, L"config_height", embedWindow->r.bottom - embedWindow->r.top);
 	}
 
 	if (old_visible != visible)
 	{
-		WritePrivateProfileInt(INI_FILE_SECTION, L"config_show", visible, ini_file);
+		SaveNativeIniInt(WINAMP_INI, INI_FILE_SECTION, L"config_show", visible);
 	}
 
 	if (initial[1].top != height || initial[1].left != width)
 	{
-		WritePrivateProfileInt(INI_FILE_SECTION, L"ff_height", height, ini_file);
-		WritePrivateProfileInt(INI_FILE_SECTION, L"ff_width", width, ini_file);
+		SaveNativeIniInt(WINAMP_INI, INI_FILE_SECTION, L"ff_height", height);
+		SaveNativeIniInt(WINAMP_INI, INI_FILE_SECTION, L"ff_width", width);
 	}
-}
-
-void ShowEmbeddedWindow(embedWindowState* embedWindow, HWND embeddedWindow, BOOL startup)
-{
-	// Winamp can report if it was started minimised which allows us to control our window
-	// to not properly show on startup otherwise the window will appear incorrectly when it
-	// is meant to remain hidden until Winamp is restored back into view correctly
-	if (startup && (SendMessage(plugin.hwndParent, WM_WA_IPC, 0, IPC_INITIAL_SHOW_STATE) == SW_SHOWMINIMIZED))
-	{
-		SetEmbeddedWindowMinimizedMode(embeddedWindow, TRUE);
-	}
-	else
-	{
-		ShowWindow(embeddedWindow, SW_SHOWNA);
-	}
-}
-
-int AddItemToMenu(HMENU hmenu, UINT id, wchar_t* text, UINT pos, int fByPosition)
-{
-	MENUITEMINFO mii = {sizeof(MENUITEMINFO), MIIM_ID | MIIM_TYPE | MIIM_DATA,
-						(text ? MFT_STRING : MFT_SEPARATOR), 0, id, 0, 0, 0, 0,
-						(text ? text : 0), (text ? lstrlen(text) : 0)};
-
-	// since this can only be 16-bit value, is better we play nicely with things
-	// which will deal with some issues the skinned code in gen_ml has at times.
-	if (HIWORD(id) == 0xFFFF)
-	{
-		mii.wID = 0xFFFF;
-	}
-	return InsertMenuItem(hmenu, pos, fByPosition, &mii);
 }
 
 void AddEmbeddedWindowToMenus(BOOL add, UINT menuId, LPWSTR menuString, BOOL setVisible)
@@ -136,14 +95,14 @@ void AddEmbeddedWindowToMenus(BOOL add, UINT menuId, LPWSTR menuString, BOOL set
 	// this will add a menu item to the main right-click menu
 	if (add)
 	{
-		main_menu = (HMENU)SendMessage(plugin.hwndParent, WM_WA_IPC, 0, IPC_GET_HMENU);
+		main_menu = GetNativeMenu((WPARAM)0);
 
 		int prior_item = GetMenuItemID(main_menu, 9);
 		if (prior_item <= 0)
 		{
 			prior_item = GetMenuItemID(main_menu, 8);
 		}
-		AddItemToMenu(main_menu, menuId, menuString, prior_item, 0);
+		AddItemToMenu2(main_menu, menuId, menuString, prior_item, 0);
 		CheckMenuItem(main_menu, menuId, MF_BYCOMMAND |
 					  ((setVisible == -1 ? visible : setVisible) ? MF_CHECKED : MF_UNCHECKED));
 	}
@@ -152,13 +111,15 @@ void AddEmbeddedWindowToMenus(BOOL add, UINT menuId, LPWSTR menuString, BOOL set
 		DeleteMenu(main_menu, menuId, MF_BYCOMMAND);
 	}
 
+#ifdef IPC_ADJUST_OPTIONSMENUPOS
 	// this will adjust the menu position (there were bugs with this api but all is fine for 5.5+)
 	SendMessage(plugin.hwndParent, WM_WA_IPC, (add ? 1 : -1), IPC_ADJUST_OPTIONSMENUPOS);
+#endif
 
 	// this will add a menu item to the main window views menu
 	if (add)
 	{
-		windows_menu = (HMENU)SendMessage(plugin.hwndParent, WM_WA_IPC, 4, IPC_GET_HMENU);
+		windows_menu = GetNativeMenu((WPARAM)4);
 
 		int prior_item = GetMenuItemID(windows_menu, 3);
 		if (prior_item <= 0)
@@ -166,7 +127,7 @@ void AddEmbeddedWindowToMenus(BOOL add, UINT menuId, LPWSTR menuString, BOOL set
 			prior_item = GetMenuItemID(windows_menu, 2);
 		}
 
-		AddItemToMenu(windows_menu, menuId, menuString, prior_item,0);
+		AddItemToMenu2(windows_menu, menuId, menuString, prior_item, 0);
 		CheckMenuItem(windows_menu, menuId, MF_BYCOMMAND |
 					  ((setVisible == -1 ? visible : setVisible) ? MF_CHECKED : MF_UNCHECKED));
 	}
@@ -175,13 +136,15 @@ void AddEmbeddedWindowToMenus(BOOL add, UINT menuId, LPWSTR menuString, BOOL set
 		DeleteMenu(windows_menu,menuId,MF_BYCOMMAND);
 	}
 
+#ifdef IPC_ADJUST_FFWINDOWSMENUPOS
 	// this will adjust the menu position (there were bugs with this api but all is fine for 5.5+)
 	SendMessage(plugin.hwndParent, WM_WA_IPC, (add ? 1 : -1), IPC_ADJUST_FFWINDOWSMENUPOS);
+#endif
 }
 
 void UpdateEmbeddedWindowsMenu(UINT menuId)
 {
-	UINT check = MF_BYCOMMAND | (visible ? MF_CHECKED : MF_UNCHECKED);
+	const UINT check = MF_BYCOMMAND | (visible ? MF_CHECKED : MF_UNCHECKED);
 	if (main_menu)
 	{
 		CheckMenuItem(main_menu, menuId, check);
@@ -213,18 +176,20 @@ LRESULT HandleEmbeddedWindowChildMessages(HWND embedWnd, UINT menuId, HWND hwnd,
 	// shortcut but also copes with using the menu via Winamp's taskbar system menu
 	if ((message == WM_SYSCOMMAND || message == WM_COMMAND) && LOWORD(wParam) == menuId)
 	{
-		ShowWindow(embedWnd, (IsWindowVisible(embedWnd) ? SW_HIDE : SW_SHOW));
+		self_update = TRUE;
+		PostMessage(embedWnd, WM_USER + (!IsWindowVisible(embedWnd) ? 102 : 105), 0, 0);
 		visible = !visible;
 		UpdateEmbeddedWindowsMenu(menuId);
+		self_update = FALSE;
 		return 1;
 	}
 	// this is sent to the child window of the frame when the 'close' button is clicked
 	else if (message == WM_CLOSE)
 	{
-		ShowWindow(embedWnd, SW_HIDE);
+		PostMessage(embedWnd, WM_USER + 105, 0, 0);
 		visible = 0;
 		UpdateEmbeddedWindowsMenu(menuId);
-		SendMessage(plugin.hwndParent, WM_COMMAND, MAKEWPARAM(WINAMP_NEXT_WINDOW, 0), 0);
+		PostMessage(plugin.hwndParent, WM_COMMAND, MAKEWPARAM(WINAMP_NEXT_WINDOW, 0), 0);
 	}
 	else if (message == WM_WINDOWPOSCHANGING)
 	{
@@ -246,44 +211,54 @@ LRESULT HandleEmbeddedWindowChildMessages(HWND embedWnd, UINT menuId, HWND hwnd,
 	return 0;
 }
 
-LRESULT HandleEmbeddedWindowWinampWindowMessages(HWND embedWnd, UINT menuId, embedWindowState* embedWindow, BOOL preSubclass,
-												 HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
+void HandleEmbeddedWindowWinampWindowMessages(HWND embedWnd, UINT menuId, embedWindowState* embedWindow,
+											  HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
-	if (preSubclass)
+	// these are done before the original window proceedure has been called to
+	// ensure we get the correct size of the window and for checking the menu
+	// item for the embedded window as applicable
+	if (message == WM_SYSCOMMAND || message == WM_COMMAND)
 	{
-		// these are done before the original window proceedure has been called to
-		// ensure we get the correct size of the window and for checking the menu
-		// item for the embedded window as applicable
-		if ((message == WM_SYSCOMMAND || message == WM_COMMAND) && LOWORD(wParam) == menuId)
+		if (LOWORD(wParam) == menuId)
 		{
-			ShowWindow(embedWnd, (IsWindowVisible(embedWnd) ? SW_HIDE : SW_SHOW));
+			self_update = TRUE;
+			PostMessage(embedWnd, WM_USER + (!IsWindowVisible(embedWnd) ? 102 : 105), 0, 0);
 			visible = !visible;
 			UpdateEmbeddedWindowsMenu(menuId);
-			return 1;
+			self_update = FALSE;
 		}
-
-		else if (message == WM_COMMAND && LOWORD(wParam) == WINAMP_REFRESHSKIN)
+		else if (LOWORD(wParam) == WINAMP_REFRESHSKIN)
 		{
 			if (!GetParent(embedWnd))
 			{
-				width = embedWindow->r.right - embedWindow->r.left;
-				height = embedWindow->r.bottom - embedWindow->r.top;
+				width = (embedWindow->r.right - embedWindow->r.left);
+				height = (embedWindow->r.bottom - embedWindow->r.top);
 			}
 		}
 	}
-	else
+	else if (message == WM_WA_IPC)
 	{
-		// this is used to cope with Winamp being started minimised and will then
-		// re-show the example window when Winamp is being restored to visibility
-		if (message == WM_SIZE && wParam == SIZE_RESTORED)
+		if (lParam == IPC_SKIN_CHANGED_NEW)
 		{
+			PostMessage(GetWindow(embedWnd, GW_CHILD), WM_USER + 0x202, 0, 0);
+		}
+		else if ((lParam == IPC_CB_ONSHOWWND) || (lParam == IPC_CB_ONHIDEWND))
+		{
+			if (((HWND)wParam == embedWnd) && !self_update)
+			{
+				visible = (lParam == IPC_CB_ONSHOWWND);
+				UpdateEmbeddedWindowsMenu(menuId);
+			}
+		}
+		else if ((lParam == IPC_IS_MINIMISED_OR_RESTORED) && !wParam)
+		{
+			// this is used to cope with Winamp being started minimised and will then
+			// re-show the example window when Winamp is being restored to visibility
 			if (EmbeddedWindowIsMinimizedMode(embedWnd))
 			{
-				ShowWindow(embedWnd, (visible ? SW_SHOWNA : SW_HIDE));
+				PostMessage(embedWnd, WM_USER + (visible ? 102 : 105), 0, 0);
 				SetEmbeddedWindowMinimizedMode(embedWnd, FALSE);
 			}
 		}
 	}
-
-	return 0;
 }

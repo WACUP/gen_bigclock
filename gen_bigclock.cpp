@@ -34,37 +34,34 @@
 
 //#define USE_COMCTL_DRAWSHADOWTEXT
 
-#define _WIN32_WINNT 0x0501
 #include "windows.h"
 #include <commctrl.h>
 #include <shellapi.h>
 #include <commdlg.h>
 #include <strsafe.h>
+#include <math.h>
 
-#include "gen.h"
-#include "wa_ipc.h"
-#include "wa_msgids.h"
-#include <../gen_ml/ml.h>
-#include <../gen_ml/ml_ipc_0313.h>
-#include <../nu/servicebuilder.h>
-#include "wa_hotkeys.h"
-#define WA_DLG_IMPLEMENT
-#include "wa_dlg.h"
+#include <winamp/gen.h>
+#include <winamp/wa_ipc.h>
+#include <winamp/wa_cup.h>
+#include <winamp/wa_msgids.h>
+#include <gen_ml/ml.h>
+#include <gen_ml/ml_ipc_0313.h>
+#include <nu/servicebuilder.h>
+#include <winamp/wa_hotkeys.h>
+#define WA_DLG_IMPORTS
+#include <winamp/wa_dlg.h>
 #include "embedwnd.h"
 #include "api.h"
-
+#include <loader/loader/paths.h>
+#include <loader/loader/utils.h>
+#include <loader/loader/ini.h>
 #include "resource.h"
 
 /* global data */
 static const wchar_t szAppName[] = L"NxS BigClock";
 #define PLUGIN_INISECTION szAppName
-#define PLUGIN_VERSION "1.03"
-
-/* Metrics
-   Note: Sizes must be in increments of 25x29
-*/
-#define WND_HEIGHT      116
-#define WND_WIDTH       275
+#define PLUGIN_VERSION "1.6.1"
 
 // Menu ID's
 UINT WINAMP_NXS_BIG_CLOCK_MENUID = (ID_GENFF_LIMIT+101);
@@ -76,51 +73,48 @@ UINT WINAMP_NXS_BIG_CLOCK_MENUID = (ID_GENFF_LIMIT+101);
 #define NXSBCDM_PLELAPSED 3
 #define NXSBCDM_PLREMAINING 4
 #define NXSBCDM_TIMEOFDAY 5
-#define NXSBCDM_MAX 5
+#define NXSBCDM_BEATSTIME 6
+#define NXSBCDM_MAX 6
+
+#define UPDATE_TIMER_ID 1
+#define UPDATE_TIMER 32
 
 /* BigClock window */
 static HWND g_BigClockWnd;
-static wchar_t g_BigClockClassName[] = L"NxSBigClockWnd",
-			   pluginTitleW[256] = {0};
-typedef HWND (*embedWindow_t)(embedWindowState *);
-LRESULT CALLBACK BigClockWndProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
+static wchar_t g_BigClockClassName[] = L"NxSBigClockWnd";
+LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 static HMENU g_hPopupMenu = 0;
 static LPARAM ipc_bigclockinit = -1;
-wchar_t *ini_file = 0;
 static genHotkeysAddStruct genhotkey = {0};
 static ATOM wndclass = 0;
 static HWND hWndBigClock = NULL;
 static embedWindowState embed = {0};
-static int no_uninstall = 1;
-static HBRUSH hbrBkGnd = NULL;
+static int upscaling = 1, dsize = 0, no_uninstall = 1;
 static HPEN hpenVis = NULL;
 static HFONT hfDisplay = NULL, hfMode = NULL;
 static LOGFONT lfDisplay = {0}, lfMode = {0};
+static HANDLE CalcThread;
+static UINT pltime;
+static int prevplpos = -1, resetCalc = 0;
 
 void DrawVisualization(HDC hdc, RECT r);
 void DrawAnalyzer(HDC hdc, RECT r, char *sadata);
 
-BOOL GetFormattedTime(LPTSTR lpszTime, UINT size, int iPos);
-
+DWORD WINAPI CalcLengthThread(LPVOID lp);
 DWORD_PTR CALLBACK ConfigDlgProc(HWND,UINT,WPARAM,LPARAM);
 
-/* subclass of Winamp's main window */
-WNDPROC lpWinampWndProcOld;
-LRESULT CALLBACK WinampSubclass(HWND,UINT,WPARAM,LPARAM);
-
 /* subclass of skinned frame window (GenWnd) */
-LRESULT CALLBACK GenWndSubclass(HWND,UINT,WPARAM,LPARAM);
-WNDPROC lpGenWndProcOld;
-
+LRESULT CALLBACK GenWndSubclass(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
+								UINT_PTR uIdSubclass, DWORD_PTR dwRefData);
 /* Menu item functions */
-void InsertMenuItemInWinamp();
-void RemoveMenuItemFromWinamp();
+void InsertMenuItemInWinamp(void);
+void RemoveMenuItemFromWinamp(void);
 
 #define NXSBCVM_OSC 1
 #define NXSBCVM_SPEC 2
 
 /* configuration items */
-static int config_shadowtext=TRUE;
+static int config_shadowtextnew=FALSE;
 static int config_showdisplaymode=TRUE;
 static int config_vismode=TRUE;
 static int config_displaymode=NXSBCDM_ELAPSEDTIME;
@@ -132,84 +126,33 @@ void config(void);
 void quit(void);
 int init(void);
 
-winampGeneralPurposePlugin plugin = { GPPHDR_VER_U, "", init, config, quit, 0, 0 };
 
-api_service* WASABI_API_SVC = NULL;
-api_application *WASABI_API_APP = NULL;
+void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
+						 WPARAM wParam, const LPARAM lParam);
+
+winampGeneralPurposePlugin plugin =
+{
+	GPPHDR_VER_WACUP,
+	(char*)L"Big Clock",
+	init, config, quit,
+	GEN_INIT_WACUP_HAS_MESSAGES
+};
+
 api_language *WASABI_API_LNG = NULL;
 // these two must be declared as they're used by the language api's
 // when the system is comparing/loading the different resources
 HINSTANCE WASABI_API_LNG_HINST = NULL, WASABI_API_ORIG_HINST = NULL;
-
 
 // this is used to identify the skinned frame to allow for embedding/control by modern skins if needed
 // {DF6F9C93-155C-4d01-BF5A-17612EDBFC4C}
 static const GUID embed_guid = 
 { 0xdf6f9c93, 0x155c, 0x4d01, { 0xbf, 0x5a, 0x17, 0x61, 0x2e, 0xdb, 0xfc, 0x4c } };
 
-
-/* Macros to read a value from an INI file with the same name as the varible itself */
-#define INI_READ_INT(x) x = GetPrivateProfileInt(PLUGIN_INISECTION, L#x, x, ini_file);
-/* Macros to write the value of a variable to an INI key with the same name as the variable itself */
-#define INI_WRITE_INT(x) WritePrivateProfileInt(PLUGIN_INISECTION, L#x, x, ini_file);
-
-LRESULT sendMlIpc(int msg, WPARAM param)
-{
-	static LRESULT IPC_GETMLWINDOW;
-	if (!IPC_GETMLWINDOW)
-	{
-		IPC_GETMLWINDOW = SendMessage(plugin.hwndParent, WM_WA_IPC, (WPARAM)&"LibraryGetWnd", IPC_REGISTER_WINAMP_IPCMESSAGE);
-	}
-	HWND mlwnd = (HWND)SendMessage(plugin.hwndParent, WM_WA_IPC, 0, IPC_GETMLWINDOW);
-
-	if ((param == 0) && (msg == 0))
-	{
-		return (LRESULT)mlwnd;
-	}
-
-	if (IsWindow(mlwnd))
-	{
-		return SendMessage(mlwnd, WM_ML_IPC, param, msg);
-	}
-
-	return 0;
-}
-
-
-BOOL Menu_TrackPopup(HMENU hMenu, UINT fuFlags, int x, int y, HWND hwnd)
-{
-	if (hMenu == NULL)
-	{
-		return NULL;
-	}
-
-	if (IsWindow((HWND)sendMlIpc(0, 0)))
-	{
-		MLSKINNEDPOPUP popup = {sizeof(MLSKINNEDPOPUP)};
-		popup.hmenu = hMenu;
-		popup.fuFlags = fuFlags;
-		popup.x = x;
-		popup.y = y;
-		popup.hwnd = hwnd;
-		popup.skinStyle = SMS_USESKINFONT;
-		return (INT)sendMlIpc(ML_IPC_TRACKSKINNEDPOPUPEX, (WPARAM)&popup);
-	}
-	return TrackPopupMenu(hMenu, fuFlags, x, y, 0, hwnd, NULL);
-}
-
-
-void UpdateSkinParts() {
-	WADlg_init(plugin.hwndParent);
-
-	if (hbrBkGnd) {
-		DeleteObject(hbrBkGnd);
-	}
-	hbrBkGnd = CreateSolidBrush(WADlg_getColor(WADLG_ITEMBG));
-
+void UpdateSkinParts(void) {
 	if (hpenVis) {
 		DeleteObject(hpenVis);
 	}
-	hpenVis = CreatePen(PS_SOLID, 2, WADlg_getColor(WADLG_ITEMFG));
+	hpenVis = CreatePen(PS_SOLID, (!dsize ? 1 : 2)/*(!dsize ? 2 : 4)*/, WADlg_getColor(WADLG_ITEMFG));
 
 	if (hfDisplay) {
 		DeleteObject(hfDisplay);
@@ -221,8 +164,26 @@ void UpdateSkinParts() {
 		DeleteObject(hfMode);
 	}
 	hfMode = CreateFontIndirect(&lfMode);
+
+	if (IsWindow(g_BigClockWnd))
+	{
+		InvalidateRect(g_BigClockWnd, NULL, FALSE);
+	}
 }
 
+void ReadFontSettings(void) {
+	lfDisplay.lfHeight = GetNativeIniInt(WINAMP_INI, PLUGIN_INISECTION, L"df_h", -50);
+	lfMode.lfHeight = GetNativeIniInt(WINAMP_INI, PLUGIN_INISECTION, L"mf_h", -13);
+
+	lfDisplay.lfItalic = (BYTE)GetNativeIniInt(WINAMP_INI, PLUGIN_INISECTION, L"df_i", 0);
+	lfMode.lfItalic = (BYTE)GetNativeIniInt(WINAMP_INI, PLUGIN_INISECTION, L"mf_i", 0);
+
+	lfDisplay.lfWeight = GetNativeIniInt(WINAMP_INI, PLUGIN_INISECTION, L"df_b", 0);
+	lfMode.lfWeight = GetNativeIniInt(WINAMP_INI, PLUGIN_INISECTION, L"mf_b", 0);
+
+	GetNativeIniString(WINAMP_INI, PLUGIN_INISECTION, L"df", L"Arial", lfDisplay.lfFaceName, LF_FACESIZE);
+	GetNativeIniString(WINAMP_INI, PLUGIN_INISECTION, L"mf", L"Arial", lfMode.lfFaceName, LF_FACESIZE);
+}
 
 bool ProcessMenuResult(UINT command, HWND parent) {
 	switch (LOWORD(command)) {
@@ -232,28 +193,33 @@ bool ProcessMenuResult(UINT command, HWND parent) {
 		case ID_CONTEXTMENU_PLAYLISTELAPSED:
 		case ID_CONTEXTMENU_PLAYLISTREMAINING:
 		case ID_CONTEXTMENU_TIMEOFDAY:
+		case ID_CONTEXTMENU_BEATSTIME:
 			config_displaymode = LOWORD(command)-ID_CONTEXTMENU_DISABLED;
-			INI_WRITE_INT(config_displaymode);
+			SaveNativeIniInt(WINAMP_INI, PLUGIN_INISECTION, L"config_displaymode", config_displaymode);
 			break;
 		case ID_CONTEXTMENU_SHOWDISPLAYMODE:
 			config_showdisplaymode = !config_showdisplaymode;
-			INI_WRITE_INT(config_showdisplaymode);
+			SaveNativeIniInt(WINAMP_INI, PLUGIN_INISECTION, L"config_showdisplaymode", config_showdisplaymode);
 			break;
 		case ID_CONTEXTMENU_SHADOWEDTEXT:
-			config_shadowtext = !config_shadowtext;
-			INI_WRITE_INT(config_shadowtext);
+			config_shadowtextnew = !config_shadowtextnew;
+			SaveNativeIniInt(WINAMP_INI, PLUGIN_INISECTION, L"config_shadowtextnew", config_shadowtextnew);
+			break;
+		case ID_CONTEXTMENU_NONE:
+			config_vismode = 0;
+			SaveNativeIniInt(WINAMP_INI, PLUGIN_INISECTION, L"config_vismode", config_vismode);
 			break;
 		case ID_CONTEXTMENU_SHOWOSC:
 			config_vismode ^= NXSBCVM_OSC;
-			INI_WRITE_INT(config_vismode);
+			SaveNativeIniInt(WINAMP_INI, PLUGIN_INISECTION, L"config_vismode", config_vismode);
 			break;
 		case ID_CONTEXTMENU_SHOWSPEC:
 			config_vismode ^= NXSBCVM_SPEC;
-			INI_WRITE_INT(config_vismode);
+			SaveNativeIniInt(WINAMP_INI, PLUGIN_INISECTION, L"config_vismode", config_vismode);
 			break;
 		case ID_CONTEXTMENU_CENTI:
 			config_centi = !config_centi;
-			INI_WRITE_INT(config_centi);
+			SaveNativeIniInt(WINAMP_INI, PLUGIN_INISECTION, L"config_centi", config_centi);
 			break;
 		case ID_CONTEXTMENU_RESETFONTS:
 			{
@@ -273,9 +239,35 @@ bool ProcessMenuResult(UINT command, HWND parent) {
 				CHOOSEFONT cf = {0};
 				cf.lStructSize = sizeof(cf);
 				cf.hwndOwner = parent;
+
+				// because we're modifying things then we need to
+				// set the font back to normal if we're in double
+				// size mode otherwise it'll get into a big mess!
+				if (upscaling && dsize) {
+					lfDisplay.lfHeight /= 2;
+					lfMode.lfHeight /= 2;
+				}
+
 				lf = cf.lpLogFont = (!mode ? &lfDisplay : &lfMode);
 				cf.Flags = CF_SCREENFONTS | CF_INITTOLOGFONTSTRUCT;
 				update = ChooseFont(&cf);
+
+				// this will revert the value back if the action
+				// was cancelled otherwise the fonts will shrink
+				// the next time a skin refresh gets received &
+				// it also requires re-reading in the font style
+				if (!update) {
+					ReadFontSettings();
+
+					// handle double-size mode as required by auto-scaling the font if its needed
+					if (upscaling && dsize) {
+						SendMessage(hWndBigClock, WM_USER + 0x99, (WPARAM)dsize, (LPARAM)upscaling);
+					}
+					else {
+						UpdateSkinParts();
+					}
+					break;
+				}
 			}
 
 			if (update) {
@@ -288,66 +280,73 @@ bool ProcessMenuResult(UINT command, HWND parent) {
 				} else {
 					memset(&lfDisplay, 0, sizeof(lfDisplay));
 					lfDisplay.lfHeight = -50;
-					lstrcpyn(lfDisplay.lfFaceName, L"Arial", LF_FACESIZE);
+					wcsncpy(lfDisplay.lfFaceName, L"Arial", LF_FACESIZE);
 
 					memset(&lfMode, 0, sizeof(lfMode));
 					lfMode.lfHeight = -13;
-					lstrcpyn(lfMode.lfFaceName, L"Arial", LF_FACESIZE);
-
-					UpdateSkinParts();
+					wcsncpy(lfMode.lfFaceName, L"Arial", LF_FACESIZE);
 				}
 
 reparse:
 				wchar_t buf[32] = {0};
-				StringCchPrintf(buf, 32, L"%d", (!mode ? lfDisplay.lfHeight : lfMode.lfHeight));
-				WritePrivateProfileString(PLUGIN_INISECTION, (!mode ? L"df_h" : L"mf_h"), buf, ini_file);
+				_itow_s((!mode ? lfDisplay.lfHeight : lfMode.lfHeight), buf, ARRAYSIZE(buf), 10);
+				SaveNativeIniString(WINAMP_INI, PLUGIN_INISECTION, (!mode ? L"df_h" : L"mf_h"), buf);
 
-				StringCchPrintf(buf, 32, L"%d", (!mode ? lfDisplay.lfItalic : lfMode.lfItalic));
-				WritePrivateProfileString(PLUGIN_INISECTION, (!mode ? L"df_i" : L"mf_i"), buf, ini_file);
+				_itow_s((!mode ? lfDisplay.lfItalic : lfMode.lfItalic), buf, ARRAYSIZE(buf), 10);
+				SaveNativeIniString(WINAMP_INI, PLUGIN_INISECTION, (!mode ? L"df_i" : L"mf_i"), buf);
 
-				StringCchPrintf(buf, 32, L"%d", (!mode ? lfDisplay.lfWeight : lfMode.lfWeight));
-				WritePrivateProfileString(PLUGIN_INISECTION, (!mode ? L"df_b" : L"mf_b"), buf, ini_file);
+				_itow_s((!mode ? lfDisplay.lfWeight : lfMode.lfWeight), buf, ARRAYSIZE(buf), 10);
+				SaveNativeIniString(WINAMP_INI, PLUGIN_INISECTION, (!mode ? L"df_b" : L"mf_b"), buf);
 
-				WritePrivateProfileString(PLUGIN_INISECTION, (!mode ? L"df" : L"mf"),
-										  (!mode ? lfDisplay.lfFaceName : lfMode.lfFaceName), ini_file);
+				SaveNativeIniString(WINAMP_INI, PLUGIN_INISECTION, (!mode ? L"df" : L"mf"),
+									(!mode ? lfDisplay.lfFaceName : lfMode.lfFaceName));
 
 				// dirty way to get main and display fonts correctly reset
 				if (reset && !mode) {
 					mode = 1;
 					goto reparse;
 				}
+
+				// handle double-size mode as required by auto-scaling the font if its needed
+				if (upscaling && dsize) {
+					SendMessage(hWndBigClock, WM_USER + 0x99, (WPARAM)dsize, (LPARAM)upscaling);
+				}
+				else {
+					UpdateSkinParts();
+				}
 			}
 			break;
 		}
 		case ID_CONTEXTMENU_FREEZE:
 			config_freeze = !config_freeze;
-			INI_WRITE_INT(config_freeze);
+			SaveNativeIniInt(WINAMP_INI, PLUGIN_INISECTION, L"config_freeze", config_freeze);
 			break;
 		case ID_CONTEXTMENU_ABOUT:
 		{
 			wchar_t message[2048] = {0};
 			StringCchPrintf(message, ARRAYSIZE(message), WASABI_API_LNGSTRINGW(IDS_ABOUT_STRING), TEXT(__DATE__));
-			MessageBox(plugin.hwndParent, message, (LPWSTR)plugin.description, 0);
+			//MessageBox(plugin.hwndParent, message, (LPWSTR)plugin.description, 0);
+			AboutMessageBox(plugin.hwndParent, message, (LPWSTR)plugin.description);
 			break;
 		}
 		default:
 			return false;
 	}
+	if (IsWindow(g_BigClockWnd))
+	{
+		InvalidateRect(g_BigClockWnd, NULL, FALSE);
+	}
 	return true;
 }
 
-
-void config() {
+void config(void) {
 	HMENU hMenu = WASABI_API_LOADMENUW(IDR_CONTEXTMENU);
 	HMENU popup = GetSubMenu(hMenu, 0);
 	RECT r = {0};
 
-	MENUITEMINFO i = {sizeof(i), MIIM_ID | MIIM_STATE | MIIM_TYPE, MFT_STRING, MFS_UNCHECKED | MFS_DISABLED, 1};
-	i.dwTypeData = pluginTitleW;
-	InsertMenuItem(popup, 0, TRUE, &i);
-
-	i.fType = MFT_SEPARATOR;
-	InsertMenuItem(popup, 1, TRUE, &i);
+	AddItemToMenu2(popup, 0, (LPWSTR)plugin.description, 0, 1);
+	EnableMenuItem(popup, 0, MF_BYCOMMAND | MF_GRAYED | MF_DISABLED);
+	AddItemToMenu2(popup, 0, 0, 1, 1);
 
 	HWND list =	FindWindowEx(GetParent(GetFocus()), 0, L"SysListView32", 0);
 	ListView_GetItemRect(list, ListView_GetSelectionMark(list), &r, LVIR_BOUNDS);
@@ -357,8 +356,7 @@ void config() {
 	DestroyMenu(hMenu);
 }
 
-
-void quit() {
+void quit(void) {
 
 	if (no_uninstall)
 	{
@@ -370,11 +368,6 @@ void quit() {
 	{
 		DestroyWindow(hWndBigClock);
 		DestroyWindow(g_BigClockWnd); /* delete our window */
-	}
-
-	if (hbrBkGnd) {
-		DeleteObject(hbrBkGnd);
-		hbrBkGnd = NULL;
 	}
 
 	if (hpenVis) {
@@ -393,96 +386,75 @@ void quit() {
 	}
 
 	UnregisterClass(g_BigClockClassName, plugin.hDllInstance);
-
-	ServiceRelease(WASABI_API_SVC, WASABI_API_LNG, languageApiGUID);
-	ServiceRelease(WASABI_API_SVC, WASABI_API_APP, applicationApiServiceGuid);
-
-	if ((LONG)WinampSubclass == GetWindowLongPtr(plugin.hwndParent, GWLP_WNDPROC)) {
-		SetWindowLongPtr(plugin.hwndParent, GWLP_WNDPROC, (LONG)lpWinampWndProcOld);
-	}
 }
 
-
-int init() {
-	/*WASABI_API_SVC = GetServiceAPIPtr();/*/
+int init(void) {
+	/*WASABI_API_SVC = GetServiceAPIPtr();*//*/
 	// load all of the required wasabi services from the winamp client
 	WASABI_API_SVC = reinterpret_cast<api_service*>(SendMessage(plugin.hwndParent, WM_WA_IPC, 0, IPC_GET_API_SERVICE));
 	if (WASABI_API_SVC == reinterpret_cast<api_service*>(1)) WASABI_API_SVC = NULL;/**/
-	if (WASABI_API_SVC != NULL)
-	{
-		ServiceBuild(WASABI_API_SVC, WASABI_API_APP, applicationApiServiceGuid);
-		ServiceBuild(WASABI_API_SVC, WASABI_API_LNG, languageApiGUID);
+	/*if (WASABI_API_SVC != NULL)
+	{*/
+		/*ServiceBuild(WASABI_API_SVC, WASABI_API_APP, applicationApiServiceGuid);
+		ServiceBuild(WASABI_API_SVC, WASABI_API_LNG, languageApiGUID);/*/
+		WASABI_API_LNG = plugin.language;/**/
 		// TODO add to lang.h
 		WASABI_API_START_LANG(plugin.hDllInstance, embed_guid);
 
+		wchar_t pluginTitleW[256] = { 0 };
 		StringCchPrintf(pluginTitleW, ARRAYSIZE(pluginTitleW), WASABI_API_LNGSTRINGW(IDS_PLUGIN_NAME), TEXT(PLUGIN_VERSION));
-		plugin.description = (char*)pluginTitleW;
-
-		WNDCLASSEX wcex = {0};
-		wcex.cbSize = sizeof(WNDCLASSEX);
-		wcex.lpszClassName = g_BigClockClassName;
-		wcex.hInstance = plugin.hDllInstance;
-		wcex.lpfnWndProc = BigClockWndProc;
-		wndclass = RegisterClassEx(&wcex);
-
-		if (!wndclass) {
-			MessageBox(plugin.hwndParent, L"Error: Could not register window class!", szAppName, MB_OK | MB_ICONERROR);
-			return GEN_INIT_FAILURE;
-		}
-
-		/* Subclass Winamp's main window */
-		lpWinampWndProcOld = (WNDPROC)SetWindowLongPtr(plugin.hwndParent, GWLP_WNDPROC, (LONG)WinampSubclass);
+		plugin.description = (char*)_wcsdup(pluginTitleW);
 
 		// wParam must have something provided else it returns 0
 		// and then acts like a IPC_GETVERSION call... not good!
-		ipc_bigclockinit = SendMessage(plugin.hwndParent, WM_WA_IPC, (WPARAM)&"NXSBC_IPC", IPC_REGISTER_WINAMP_IPCMESSAGE);
+		ipc_bigclockinit = RegisterIPC((WPARAM)&"NXSBC_IPC");
 		PostMessage(plugin.hwndParent, WM_WA_IPC, 0, ipc_bigclockinit);
 
 		return GEN_INIT_SUCCESS;
+	/*}
+	return GEN_INIT_FAILURE;*/
+}
+
+// just using these to track the paused and playing states
+int is_paused = 0, is_playing = 0, plpos = 0, itemlen = 0;
+UINT pllen = 0;
+
+void CALLBACK UpdateWnTimerProc(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
+	if ((idEvent == UPDATE_TIMER_ID) && IsWindowVisible(hWnd)) {
+		InvalidateRect(hWnd, NULL, FALSE);
 	}
-	return GEN_INIT_FAILURE;
 }
 
 
-LRESULT CALLBACK WinampSubclass(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
+						 WPARAM wParam, const LPARAM lParam)
 {
-	switch (uMsg) {
-	case WM_WA_IPC:
+	if (uMsg == WM_WA_IPC)
+	{
 		/* Init time */
-		if (lParam==ipc_bigclockinit) {
-			ini_file = (wchar_t *)SendMessage(plugin.hwndParent, WM_WA_IPC, 0, IPC_GETINIFILEW);
+		if (lParam == ipc_bigclockinit) {
+			GetNativeIniIntParam(WINAMP_INI, PLUGIN_INISECTION, L"config_showdisplaymode", &config_showdisplaymode);
+			GetNativeIniIntParam(WINAMP_INI, PLUGIN_INISECTION, L"config_shadowtextnew", &config_shadowtextnew);
+			GetNativeIniIntParam(WINAMP_INI, PLUGIN_INISECTION, L"config_vismode", &config_vismode);
+			GetNativeIniIntParam(WINAMP_INI, PLUGIN_INISECTION, L"config_displaymode", &config_displaymode);
+			GetNativeIniIntParam(WINAMP_INI, PLUGIN_INISECTION, L"config_centi", &config_centi);
+			GetNativeIniIntParam(WINAMP_INI, PLUGIN_INISECTION, L"config_freeze", &config_freeze);
 
-			INI_READ_INT(config_showdisplaymode);
-			INI_READ_INT(config_shadowtext);
-			INI_READ_INT(config_vismode);
-			INI_READ_INT(config_displaymode);
-			INI_READ_INT(config_centi);
-			INI_READ_INT(config_freeze);
+			ReadFontSettings();
 
-			lfDisplay.lfHeight = GetPrivateProfileInt(PLUGIN_INISECTION, L"df_h", -50, ini_file);
-			lfMode.lfHeight = GetPrivateProfileInt(PLUGIN_INISECTION, L"mf_h", -13, ini_file);
-
-			lfDisplay.lfItalic = (BYTE)GetPrivateProfileInt(PLUGIN_INISECTION, L"df_i", 0, ini_file);
-			lfMode.lfItalic = (BYTE)GetPrivateProfileInt(PLUGIN_INISECTION, L"mf_i", 0, ini_file);
-
-			lfDisplay.lfWeight = GetPrivateProfileInt(PLUGIN_INISECTION, L"df_b", 0, ini_file);
-			lfMode.lfWeight = GetPrivateProfileInt(PLUGIN_INISECTION, L"mf_b", 0, ini_file);
-
-			GetPrivateProfileString(PLUGIN_INISECTION, L"df", L"Arial", lfDisplay.lfFaceName, LF_FACESIZE, ini_file);
-			GetPrivateProfileString(PLUGIN_INISECTION, L"mf", L"Arial", lfMode.lfFaceName, LF_FACESIZE, ini_file);
-
+			dsize = GetDoubleSize(&upscaling);
 
 			// for the purposes of this example we will manually create an accelerator table so
 			// we can use IPC_REGISTER_LOWORD_COMMAND to get a unique id for the menu items we
 			// will be adding into Winamp's menus. using this api will allocate an id which can
 			// vary between Winamp revisions as it moves depending on the resources in Winamp.
-			WINAMP_NXS_BIG_CLOCK_MENUID = SendMessage(plugin.hwndParent, WM_WA_IPC, 0, IPC_REGISTER_LOWORD_COMMAND);
+			WINAMP_NXS_BIG_CLOCK_MENUID = RegisterCommandID(0);
 
 			// then we show the embedded window which will cause the child window to be
 			// sized into the frame without having to do any thing ourselves. also this will
 			// only show the window if Winamp was not minimised on close and the window was
 			// open at the time otherwise it will remain hidden
-			old_visible = visible = GetPrivateProfileInt(PLUGIN_INISECTION, L"config_show", TRUE, ini_file);
+			old_visible = visible = GetNativeIniInt(WINAMP_INI, PLUGIN_INISECTION, L"config_show", TRUE);
 
 			// finally we add menu items to the main right-click menu and the views menu
 			// with Modern skins which support showing the views menu for accessing windows
@@ -490,21 +462,31 @@ LRESULT CALLBACK WinampSubclass(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 
 			// now we will attempt to create an embedded window which adds its own main menu entry
 			// and related keyboard accelerator (like how the media library window is integrated)
+			embed.flags |= EMBED_FLAGS_SCALEABLE_WND;	// double-size support!
 			hWndBigClock = CreateEmbeddedWindow(&embed, embed_guid);
 
 			/* Subclass skinned window frame */
-			lpGenWndProcOld = (WNDPROC)SetWindowLong(hWndBigClock, GWL_WNDPROC, (LONG)GenWndSubclass);
+			Subclass(hWndBigClock, GenWndSubclass);
 
 			// once the window is created we can then specify the window title and menu integration
 			SetWindowText(hWndBigClock, WASABI_API_LNGSTRINGW(IDS_NXS_BIG_CLOCK));
 
-			g_BigClockWnd = CreateWindowEx(0, (LPCTSTR)wndclass, szAppName, WS_CHILD|WS_VISIBLE,
-				0, 0, 0, 0, hWndBigClock, NULL, plugin.hDllInstance, NULL);
+			WNDCLASSEX wcex = { 0 };
+			wcex.cbSize = sizeof(WNDCLASSEX);
+			wcex.lpszClassName = g_BigClockClassName;
+			wcex.hInstance = plugin.hDllInstance;
+			wcex.lpfnWndProc = BigClockWndProc;
+			wndclass = RegisterClassEx(&wcex);
+			if (wndclass)
+			{
+				g_BigClockWnd = CreateWindowEx(0, (LPCTSTR)wndclass, szAppName, WS_CHILD | WS_VISIBLE,
+					0, 0, 0, 0, hWndBigClock, NULL, plugin.hDllInstance, NULL);
+			}
 
 			// Winamp can report if it was started minimised which allows us to control our window
 			// to not properly show on startup otherwise the window will appear incorrectly when it
 			// is meant to remain hidden until Winamp is restored back into view correctly
-			if ((SendMessage(plugin.hwndParent, WM_WA_IPC, 0, IPC_INITIAL_SHOW_STATE) == SW_SHOWMINIMIZED))
+			if (InitialShowState() == SW_SHOWMINIMIZED)
 			{
 				SetEmbeddedWindowMinimizedMode(hWndBigClock, TRUE);
 			}
@@ -513,16 +495,15 @@ LRESULT CALLBACK WinampSubclass(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 				// only show on startup if under a classic skin and was set
 				if (visible)
 				{
-					ShowWindow(hWndBigClock, SW_SHOW);
+					PostMessage(hWndBigClock, WM_USER + 102, 0, 0);
 				}
 			}
 
 			/* Get message value */
-			UINT genhotkeys_add_ipc = SendMessage(plugin.hwndParent, WM_WA_IPC,
-				(WPARAM)"GenHotkeysAdd", IPC_REGISTER_WINAMP_IPCMESSAGE);
+			UINT genhotkeys_add_ipc = RegisterIPC((WPARAM)&"GenHotkeysAdd");
 
 			/* Set up the genHotkeysAddStruct */
-			genhotkey.name = (char*)_wcsdup(WASABI_API_LNGSTRINGW(IDS_GHK_STRING));
+			genhotkey.name = (char*)WASABI_API_LNGSTRINGW_DUP(IDS_GHK_STRING);
 			genhotkey.flags = HKF_NOSENDMSG | HKF_UNICODE_NAME;
 			genhotkey.id = "NxSBigClockToggle";
 			// get this to send a WM_COMMAND message so we don't have to do anything specific
@@ -531,27 +512,86 @@ LRESULT CALLBACK WinampSubclass(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 			genhotkey.lParam = 0;
 			genhotkey.wnd = g_BigClockWnd;
 			PostMessage(plugin.hwndParent, WM_WA_IPC, (WPARAM)&genhotkey, genhotkeys_add_ipc);
-		}
-		break;
-	}
 
+			// ensure we've got current states as due to how the load
+			// can happen, it's possible to not catch the play event.
+			const int playing = GetPlayingState();
+			is_paused = (playing == 3);
+			is_playing = (playing == 1 || is_paused);
+			pllen = GetPlaylistLength();
+			plpos = GetPlaylistPosition();
+			itemlen = GetCurrentTrackLengthMilliSeconds();
+
+			if ((config_displaymode == NXSBCDM_TIMEOFDAY) ||
+				(config_displaymode == NXSBCDM_BEATSTIME)) {
+				if (!is_playing) {
+					SetTimer(g_BigClockWnd, UPDATE_TIMER_ID, (config_centi ? UPDATE_TIMER : 1000), UpdateWnTimerProc);
+				}
+			}
+			else {
+				if (is_playing) {
+					SetTimer(g_BigClockWnd, UPDATE_TIMER_ID, UPDATE_TIMER, UpdateWnTimerProc);
+				}
+			}
+		}
+		// this is sent after IPC_PLAYING_FILE on 5.3+ clients
+		else if (lParam == IPC_PLAYING_FILEW) {
+			is_paused = 0;
+			is_playing = 1;
+			pllen = GetPlaylistLength();
+			plpos = GetPlaylistPosition();
+			itemlen = GetCurrentTrackLengthMilliSeconds();
+
+			KillTimer(g_BigClockWnd, UPDATE_TIMER_ID);
+			SetTimer(g_BigClockWnd, UPDATE_TIMER_ID, UPDATE_TIMER, UpdateWnTimerProc);
+		}
+		// this whole section tests the playback state to determine what is happening
+		else if (lParam == IPC_CB_MISC && wParam == IPC_CB_MISC_STATUS) {
+			const int cur_playing = GetPlayingState();
+			if ((cur_playing == 1) && (GetCurrentTrackPos() > 0)) {
+				if (is_paused) {
+					is_paused = 0;
+
+					SetTimer(g_BigClockWnd, UPDATE_TIMER_ID, ((config_displaymode == NXSBCDM_TIMEOFDAY) ||
+							 (config_displaymode == NXSBCDM_BEATSTIME) ? (config_centi ?
+							 UPDATE_TIMER : 1000): UPDATE_TIMER), UpdateWnTimerProc);
+				}
+			}
+			else if (cur_playing == 3) {
+				is_paused = 1;
+				if ((config_displaymode != NXSBCDM_TIMEOFDAY) &&
+					(config_displaymode != NXSBCDM_BEATSTIME)) {
+					// we'll let it keep running otherwise view
+					// updates won't work as expected plus the
+					// drawing will deal with avoiding querying
+					// for vis data as needed vs being paused
+					//KillTimer(g_BigClockWnd, UPDATE_TIMER_ID);
+					InvalidateRect(g_BigClockWnd, NULL, FALSE);
+				}
+			}
+			else if (!cur_playing && (is_playing == 1)) {
+				is_playing = is_paused = 0;
+				if ((config_displaymode != NXSBCDM_TIMEOFDAY) &&
+					(config_displaymode != NXSBCDM_BEATSTIME)) {
+					KillTimer(g_BigClockWnd, UPDATE_TIMER_ID);
+					InvalidateRect(g_BigClockWnd, NULL, FALSE);
+				}
+			}
+			else if (!cur_playing && (is_playing == 0)) {
+				pllen = GetPlaylistLength();
+				plpos = GetPlaylistPosition();
+				itemlen = GetCurrentTrackLengthMilliSeconds();
+				InvalidateRect(g_BigClockWnd, NULL, FALSE);
+			}
+		}
+	}
+	
 	// this will handle the message needed to be caught before the original window
 	// proceedure of the subclass can process it. with multiple windows then this
 	// would need to be duplicated for the number of embedded windows your handling
 	HandleEmbeddedWindowWinampWindowMessages(hWndBigClock, WINAMP_NXS_BIG_CLOCK_MENUID,
-											 &embed, TRUE, hwnd, uMsg, wParam, lParam);
-
-	LRESULT ret = CallWindowProc(lpWinampWndProcOld, hwnd, uMsg, wParam, lParam);
-
-	// this will handle the message needed to be caught after the original window
-	// proceedure of the subclass can process it. with multiple windows then this
-	// would need to be duplicated for the number of embedded windows your handling
-	HandleEmbeddedWindowWinampWindowMessages(hWndBigClock, WINAMP_NXS_BIG_CLOCK_MENUID,
-											 &embed, FALSE, hwnd, uMsg, wParam, lParam);
-
-	return ret;
+											 &embed, hWnd, uMsg, wParam, lParam);
 }
-
 
 int GetFormattedTime(LPWSTR lpszTime, UINT size, int iPos) {
 
@@ -574,13 +614,59 @@ int GetFormattedTime(LPWSTR lpszTime, UINT size, int iPos) {
 
 	if (config_centi) {
 		wchar_t szMsFmt[] = L".%.2d";
-		int offset = lstrlen(lpszTime);
+		int offset = wcslen(lpszTime);
 		StringCchPrintf(lpszTime + offset, size - offset, szMsFmt, dsec);
 	}
 
-	return lstrlen(lpszTime);
+	return wcslen(lpszTime);
 }
 
+DWORD WINAPI CalcLengthThread(LPVOID lp)
+{
+startCalc:
+	basicFileInfoStructW bfi = {0};
+	if (!lp) {
+		for (int i=0;i<plpos;i++) {
+			bfi.filename = GetPlaylistItemFile(i);
+			GetBasicFileInfo(&bfi, TRUE);
+			pltime += bfi.length;
+
+			if (resetCalc) {
+				break;
+			}
+		}
+	}
+	else {
+		for (UINT i=plpos;i<pllen;i++) {
+			bfi.filename = GetPlaylistItemFile(i);
+			GetBasicFileInfo(&bfi, TRUE);
+			pltime += bfi.length;
+
+			if (resetCalc) {
+				break;
+			}
+		}
+	}
+
+	if (resetCalc) {
+		resetCalc = 0;
+		goto startCalc;
+	}
+
+	pltime *= 1000; // s -> ms
+
+	if (IsWindow(g_BigClockWnd))
+	{
+		InvalidateRect(g_BigClockWnd, NULL, FALSE);
+	}
+
+	if (CalcThread)
+	{
+		CloseHandle(CalcThread);
+		CalcThread = 0;
+	}
+	return 0;
+}
 
 LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
 
@@ -596,42 +682,69 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 	switch (uMsg) {
 	case WM_CREATE:
 		{
-			UpdateSkinParts();
-			SetTimer(hWnd, 1, 10, NULL);
+			// handle double-size mode as required by auto-scaling the font if its needed
+			if (upscaling && dsize) {
+				SendMessage(hWndBigClock, WM_USER + 0x99, (WPARAM)dsize, (LPARAM)upscaling);
+			}
+			else {
+				UpdateSkinParts();
+			}
 
 			HACCEL accel = WASABI_API_LOADACCELERATORSW(IDR_ACCELERATOR_WND);
 			if (accel) {
-				WASABI_API_APP->app_addAccelerators(hWnd, &accel, 1, TRANSLATE_MODE_NORMAL);
+				/*WASABI_API_APP*/plugin.app->app_addAccelerators(hWnd, &accel, 1, TRANSLATE_MODE_NORMAL);
 			}
-			return 1;
+			break;
 		}
 	case WM_CLOSE:
 		// prevent closing the skinned frame from destroying this window
 		return 1;
 	case WM_DESTROY:
 		DestroyMenu(g_hPopupMenu);
-		KillTimer(hWnd, 1);
-		break;
-	case WM_WA_IPC:
-		// make sure we catch all appropriate skin changes
-		if (lParam == IPC_SKIN_CHANGED ||
-			lParam == IPC_CB_RESETFONT ||
-			lParam == IPC_FF_ONCOLORTHEMECHANGED) {
-			UpdateSkinParts();
-		} else {
-			break;
-		}
-	case WM_DISPLAYCHANGE:
-		if (wParam==0 && lParam==0) {
-			UpdateSkinParts();
-		}
+		KillTimer(hWnd, UPDATE_TIMER_ID);
 		break;
 	case WM_LBUTTONUP:
-		if (config_displaymode>=NXSBCDM_MAX)
-			config_displaymode = 0;
-		else
-			++config_displaymode;
-		INI_WRITE_INT(config_displaymode);
+		// go forwards or backwards through the options depending on the shift state
+		if (!(GetKeyState(VK_SHIFT) & 0x1000)) {
+			if (config_displaymode>=NXSBCDM_MAX) {
+				config_displaymode = 0;
+			}
+			else {
+				++config_displaymode;
+			}
+		}
+		else {
+			if (config_displaymode<=0) {
+				config_displaymode = NXSBCDM_MAX;
+			}
+			else {
+				--config_displaymode;
+			}
+		}
+
+		SaveNativeIniInt(WINAMP_INI, PLUGIN_INISECTION, L"config_displaymode", config_displaymode);
+
+		// for the time of day we need to ensure it's running
+		// regularly otherwise it'll only be updated if playing
+		if ((config_displaymode == NXSBCDM_TIMEOFDAY) ||
+			(config_displaymode == NXSBCDM_BEATSTIME)) {
+			if (!is_playing) {
+				SetTimer(g_BigClockWnd, UPDATE_TIMER_ID, (config_centi ? UPDATE_TIMER : 1000), UpdateWnTimerProc);
+			}
+		}
+		else {
+			if (!is_playing) {
+				KillTimer(g_BigClockWnd, UPDATE_TIMER_ID);
+				InvalidateRect(g_BigClockWnd, NULL, FALSE);
+			}
+
+			// if changing to the playlist elapsed / remaining
+			// modes then trigger a (re-)calcuation of the info
+			if ((config_displaymode == NXSBCDM_PLELAPSED) ||
+				(config_displaymode == NXSBCDM_PLREMAINING)) {
+				prevplpos = -1;
+			}
+		}
 		return 0;
 	case WM_COMMAND:	// for what's handled from the accel table
 		if (ProcessMenuResult(wParam, hWnd))
@@ -664,7 +777,10 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 				MF_BYCOMMAND|(config_showdisplaymode?MF_CHECKED:MF_UNCHECKED));
 
 			CheckMenuItem(g_hPopupMenu, ID_CONTEXTMENU_SHADOWEDTEXT,
-				MF_BYCOMMAND|(config_shadowtext?MF_CHECKED:MF_UNCHECKED));
+				MF_BYCOMMAND|(config_shadowtextnew?MF_CHECKED:MF_UNCHECKED));
+
+			CheckMenuItem(g_hPopupMenu, ID_CONTEXTMENU_NONE,
+				MF_BYCOMMAND|(!config_vismode?MF_CHECKED:MF_UNCHECKED));
 
 			CheckMenuItem(g_hPopupMenu, ID_CONTEXTMENU_SHOWOSC,
 				MF_BYCOMMAND|((config_vismode&NXSBCVM_OSC)==NXSBCVM_OSC?MF_CHECKED:MF_UNCHECKED));
@@ -672,7 +788,7 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 			CheckMenuItem(g_hPopupMenu, ID_CONTEXTMENU_SHOWSPEC,
 				MF_BYCOMMAND|((config_vismode&NXSBCVM_SPEC)==NXSBCVM_SPEC?MF_CHECKED:MF_UNCHECKED));
 
-			CheckMenuRadioItem(g_hPopupMenu, ID_CONTEXTMENU_DISABLED, ID_CONTEXTMENU_TIMEOFDAY,
+			CheckMenuRadioItem(g_hPopupMenu, ID_CONTEXTMENU_DISABLED, ID_CONTEXTMENU_BEATSTIME,
 				ID_CONTEXTMENU_DISABLED+config_displaymode, MF_BYCOMMAND|MF_CHECKED);
 
 			CheckMenuItem(g_hPopupMenu, ID_CONTEXTMENU_CENTI,
@@ -681,29 +797,29 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 			CheckMenuItem(g_hPopupMenu, ID_CONTEXTMENU_FREEZE,
 				MF_BYCOMMAND|(config_freeze?MF_CHECKED:MF_UNCHECKED));
 
-			CheckMenuRadioItem(g_hPopupMenu, ID_CONTEXTMENU_DISABLED, ID_CONTEXTMENU_TIMEOFDAY,
+			CheckMenuRadioItem(g_hPopupMenu, ID_CONTEXTMENU_DISABLED, ID_CONTEXTMENU_BEATSTIME,
 				ID_CONTEXTMENU_DISABLED+config_displaymode, MF_BYCOMMAND|MF_CHECKED);
-			Menu_TrackPopup(g_hPopupMenu, TPM_LEFTBUTTON, pt.x, pt.y, hWnd);
-		}
-		return 1;
-	case WM_TIMER:
-		if (wParam==1) {
-			InvalidateRect(hWnd, NULL, FALSE);
-			return 1;
+			TrackPopup(g_hPopupMenu, TPM_LEFTBUTTON, pt.x, pt.y, hWnd);
 		}
 		break;
+	case WM_USER+0x202:	// WM_DISPLAYCHANGE / IPC_SKIN_CHANGED_NEW / ML_MSG_SKIN_CHANGED
+		{
+			// make sure we catch all appropriate skin changes
+			UpdateSkinParts();
+		}
+		return 0;
+	case WM_ERASEBKGND:
+		{
+			// handled in WM_PAINT
+			return 1;
+		}
 	case WM_PAINT:
 		{
-			PAINTSTRUCT ps = {0};
 			RECT r = {0};
 			wchar_t szTime[256] = {0};
 
 			int pos = 0; // The position we display in our big clock
 			int dwDisplayMode = 0;
-
-			/* Only draw visualization if Winamp is playing music and one of the visualization modes are on */
-			BOOL bShouldDrawVis = SendMessage(plugin.hwndParent, WM_WA_IPC, 0, IPC_ISPLAYING) >= 1 &&
-				((config_vismode & NXSBCVM_OSC) == NXSBCVM_OSC || (config_vismode & NXSBCVM_SPEC) == NXSBCVM_SPEC);				
 
 			GetClientRect(hWnd, &r);
 
@@ -716,111 +832,127 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 
 			// Paint the background
 			SetBkColor(hdc, WADlg_getColor(WADLG_ITEMBG));
-			SetTextColor(hdc, WADlg_getColor(WADLG_ITEMFG));
 			SetBkMode(hdc, TRANSPARENT);
 			
-			FillRect(hdc, &r, hbrBkGnd);
+			FillRect(hdc, &r, WADlg_getBrush(WADLG_ITEMBG_BRUSH));
 
 			HFONT holdfont = (HFONT)SelectObject(hdc, hfDisplay);
 
 			switch (config_displaymode) {
-			case NXSBCDM_DISABLED:
-				dwDisplayMode = 0;
-				break;
-			case NXSBCDM_ELAPSEDTIME:
-				pos = SendMessage(plugin.hwndParent, WM_WA_IPC, 0, IPC_GETOUTPUTTIME);
-				dwDisplayMode = IDS_ELAPSED;
-				break;
-			case NXSBCDM_REMAININGTIME:
-				pos = (SendMessage(plugin.hwndParent, WM_WA_IPC, 1, IPC_GETOUTPUTTIME)*1000)-
-					SendMessage(plugin.hwndParent, WM_WA_IPC, 0, IPC_GETOUTPUTTIME);
-				dwDisplayMode = IDS_REMAINING;
-				break;
-			case NXSBCDM_PLELAPSED:
-				{
-					static int prevplpos=-1;
-					int plpos;
-					static UINT pltime;
-					basicFileInfoStruct bfi = {0};
-
-					plpos = SendMessage(plugin.hwndParent, WM_WA_IPC, 0, IPC_GETLISTPOS);
-
-					// Only do this when song has changed, since the code encapsulated by this
-					// if clause is very time consuming if the playlist is large.
-					if (plpos != prevplpos) {
-						prevplpos = plpos;
-
-						// Get combined duration of all songs up to (but not including) the current song
-						pltime = 0;
-						for (int i=0;i<plpos;i++) {
-							bfi.filename = (char*)SendMessage(plugin.hwndParent, WM_WA_IPC, i, IPC_GETPLAYLISTFILE);
-							SendMessage(plugin.hwndParent, WM_WA_IPC, (WPARAM)&bfi, IPC_GET_BASIC_FILE_INFO);
-							pltime += bfi.length;
+				case NXSBCDM_DISABLED:
+					dwDisplayMode = 0;
+					break;
+				case NXSBCDM_ELAPSEDTIME:
+					pos = GetCurrentTrackPos();
+					dwDisplayMode = IDS_ELAPSED;
+					break;
+				case NXSBCDM_REMAININGTIME:
+					{
+						// due to some quirks in how playback can happen
+						// it's possible that the earlier attempt to get
+						// this failed / not ready so we re-check it now
+						if (itemlen <= 0) {
+							itemlen = GetCurrentTrackLengthMilliSeconds();
+							if (itemlen < 0) {
+								itemlen = 0;
+							}
 						}
-						pltime *= 1000; // s -> ms
+						pos = (itemlen - GetCurrentTrackPos());
+						dwDisplayMode = IDS_REMAINING;
 					}
-					// Add elapsed time of current song and store result in pos
-					pos = pltime+SendMessage(plugin.hwndParent, WM_WA_IPC, 0, IPC_GETOUTPUTTIME);
+					break;
+				case NXSBCDM_PLELAPSED:
+					{
+						// Only do this when song has changed, since the code encapsulated by this
+						// if clause is very time consuming if the playlist is large.
+						if (plpos != prevplpos) {
+							prevplpos = plpos;
 
-					dwDisplayMode = IDS_PLAYLIST_ELAPSED;
-				}
-				break;
-			case NXSBCDM_PLREMAINING:
-				{
-					static int prevplpos=-1;
-					int plpos;
-					UINT pllen;
-					static UINT pltime;
-					UINT i;
-					basicFileInfoStruct bfi;
+							// Get combined duration of all songs up to (but not including) the current song
+							pltime = 0;
 
-					bfi.quickCheck = 0;
-					bfi.title = 0;
-					bfi.titlelen = 0;
-				
-					pllen = SendMessage(plugin.hwndParent, WM_WA_IPC, 0, IPC_GETLISTLENGTH);
-					plpos = SendMessage(plugin.hwndParent, WM_WA_IPC, 0, IPC_GETLISTPOS);
-
-					// Only do this when song has changed, since the code encapsulated by this
-					// if clause is very time consuming if the playlist is large.
-					if (plpos != prevplpos) {
-						prevplpos = plpos;
-
-						// Get combined duration of all songs from and including the current song to end of list
-						pltime = 0;
-						for (i=plpos;i<pllen;i++) {
-							bfi.filename = (char*)SendMessage(plugin.hwndParent, WM_WA_IPC, i, IPC_GETPLAYLISTFILE);
-							SendMessage(plugin.hwndParent, WM_WA_IPC, (WPARAM)&bfi, IPC_GET_BASIC_FILE_INFO);
-							pltime += bfi.length;
+							if (!CalcThread) {
+								CalcThread = CreateThread(0, 0, (LPTHREAD_START_ROUTINE)CalcLengthThread, (LPVOID)0, CREATE_SUSPENDED, NULL);
+								if (CalcThread)
+								{
+									SetThreadPriority(CalcThread, THREAD_PRIORITY_LOWEST);
+									ResumeThread(CalcThread);
+								}
+							}
+							else {
+								resetCalc = 1;
+							}
+							WASABI_API_LNGSTRINGW_BUF(IDS_CALCULATING, szTime, ARRAYSIZE(szTime));
 						}
-						pltime *= 1000; // s -> ms
-					}
 
-					// Subtract elapsed time of current song and store result in pos
-					pos = (pltime-SendMessage(plugin.hwndParent, WM_WA_IPC, 0, IPC_GETOUTPUTTIME));
-					dwDisplayMode = IDS_PLAYLIST_REMAINING;
-				}
-				break;
-			case NXSBCDM_TIMEOFDAY:
-				{
-					SYSTEMTIME st = {0};
-					GetLocalTime(&st);
-					pos = ((st.wHour*60*60)+(st.wMinute*60)+st.wSecond)*1000+st.wMilliseconds;
-					dwDisplayMode = IDS_TIME_OF_DAY;
-				}
-				break;
+						// Add elapsed time of current song and store result in pos
+						pos = (pltime + GetCurrentTrackPos());
+						dwDisplayMode = IDS_PLAYLIST_ELAPSED;
+					}
+					break;
+				case NXSBCDM_PLREMAINING:
+					{
+						// Only do this when song has changed, since the code encapsulated by this
+						// if clause is very time consuming if the playlist is large.
+						if (plpos != prevplpos) {
+							prevplpos = plpos;
+
+							// Get combined duration of all songs from and including the current song to end of list
+							pltime = 0;
+
+							if (!CalcThread) {
+								CalcThread = CreateThread(0, 0, (LPTHREAD_START_ROUTINE)CalcLengthThread, (LPVOID)1, CREATE_SUSPENDED, NULL);
+								if (CalcThread)
+								{
+									SetThreadPriority(CalcThread, THREAD_PRIORITY_LOWEST);
+									ResumeThread(CalcThread);
+								}
+							}
+							else {
+								resetCalc = 1;
+							}
+							WASABI_API_LNGSTRINGW_BUF(IDS_CALCULATING, szTime, ARRAYSIZE(szTime));
+						}
+
+						// Subtract elapsed time of current song and store result in pos
+						pos = (pltime - GetCurrentTrackPos());
+						dwDisplayMode = IDS_PLAYLIST_REMAINING;
+					}
+					break;
+				case NXSBCDM_TIMEOFDAY:
+					{
+						SYSTEMTIME st = {0};
+						GetLocalTime(&st);
+						pos = ((st.wHour*60*60)+(st.wMinute*60)+st.wSecond)*1000+st.wMilliseconds;
+						dwDisplayMode = IDS_TIME_OF_DAY;
+					}
+					break;
+				case NXSBCDM_BEATSTIME:
+					{
+						SYSTEMTIME st = {0};
+						GetSystemTime(&st);
+						// need to convert this to be UTC+1 & account
+						// for the wrapping of the time from the UTC
+						if (st.wHour == 23)
+						{
+							st.wHour = 0;
+						}
+						else
+						{
+							++st.wHour;
+						}
+
+						StringCchPrintf(szTime, ARRAYSIZE(szTime), (config_centi ? L"@%.02f" : L"@%.f"),
+										(((st.wHour * 3600) + (st.wMinute * 60) + st.wSecond) * (1 / 86.4f)));
+						dwDisplayMode = IDS_BEATS_TIME;
+					}
+					break;
 			}
 			
 			if (config_displaymode != NXSBCDM_DISABLED) {
-				int len = GetFormattedTime(szTime, ARRAYSIZE(szTime), pos);
+				int len = (!szTime[0] ? GetFormattedTime(szTime, ARRAYSIZE(szTime), pos) : wcslen(szTime));
 
-				if (config_shadowtext) {
-// Using COMCTL32.DLL's DrawShadowText function is slow,
-// that's why I have an ifdef for it.
-#ifdef USE_COMCTL_DRAWSHADOWTEXT
-					DrawShadowText(hdc, szTime, -1, &r, DT_CENTER|DT_VCENTER|DT_SINGLELINE,
-							WADlg_getColor(WADLG_ITEMFG), 0x00808080, 5, 5);
-#else
+				if (config_shadowtextnew) {
 					// Draw text's "shadow"
 					r.left += 5;
 					r.top += 5;
@@ -830,17 +962,20 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 					// Draw text
 					r.left -= 5;
 					r.top -= 5;
-					SetTextColor(hdc, WADlg_getColor(WADLG_ITEMFG));
-					DrawText(hdc, szTime, len, &r, DT_CENTER|DT_VCENTER|DT_SINGLELINE);
-#endif
-				} else {
-					DrawText(hdc, szTime, len, &r, DT_CENTER|DT_VCENTER|DT_SINGLELINE);
 				}
+
+				SetTextColor(hdc, WADlg_getColor(WADLG_ITEMFG));
+				DrawText(hdc, szTime, len, &r, DT_CENTER|DT_VCENTER|DT_SINGLELINE);
+			}
+			else {
+				SetTextColor(hdc, WADlg_getColor(WADLG_ITEMFG));
 			}
 
 			SelectObject(hdc, holdfont);
 
-			if (bShouldDrawVis) {
+			/* Only draw visualization if Winamp is playing music and one of the visualization modes are on */
+			if (is_playing && ((config_vismode & NXSBCVM_OSC) == NXSBCVM_OSC ||
+				(config_vismode & NXSBCVM_SPEC) == NXSBCVM_SPEC)) {
 				DrawVisualization(hdc, r);
 			}
 
@@ -849,16 +984,20 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 
 				SIZE s = {0};
 				LPCWSTR lpszDisplayMode = WASABI_API_LNGSTRINGW(dwDisplayMode);
-				int len = lstrlen(lpszDisplayMode);
+				int len = wcslen(lpszDisplayMode);
 				GetTextExtentPoint32(hdc, lpszDisplayMode, len, &s);
 				TextOut(hdc, 0, r.bottom-s.cy, lpszDisplayMode, len);
 
 				SelectObject(hdc, holdfont);
 			}
 
+			PAINTSTRUCT ps = {0};
 			hdcwnd = BeginPaint(hWnd, &ps);
 
 			// Copy double-buffer to screen
+			// we use the client area instead of
+			// using the paint area as it's not
+			// the same if partially off-screen
 			BitBlt(hdcwnd, r.left, r.top, r.right, r.bottom, hdc, 0, 0, SRCCOPY);
 
 			EndPaint(hWnd, &ps);
@@ -871,56 +1010,69 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 		return 0;
 	}
 
-	return CallWindowProc(DefWindowProc, hWnd, uMsg, wParam, lParam);
+	return DefWindowProc(hWnd, uMsg, wParam, lParam);
 }
 
 void DrawVisualization(HDC hdc, RECT r)
 {
 	BLENDFUNCTION bf={0,0,80,0};
-	RECT rVis;
 
-	static char* (*export_sa_get)(void)=NULL;
-	static void (*export_sa_setreq)(int)=NULL;
+	// cppcheck-suppress nullPointerRedundantCheck
+	static char* (*export_sa_get)(char data[75*2 + 8]);
+	// cppcheck-suppress nullPointerRedundantCheck
+	static void (*export_sa_setreq)(int);
 
 	/* Get function pointers from Winamp */
-	if (!export_sa_get)
-		export_sa_get = (char* (*)(void))SendMessage(plugin.hwndParent, WM_WA_IPC, 0, IPC_GETSADATAFUNC);
-	if (!export_sa_setreq)
-		export_sa_setreq = (void (*)(int))SendMessage(plugin.hwndParent, WM_WA_IPC, 1, IPC_GETSADATAFUNC);
+	if (!export_sa_get) {
+		export_sa_get = (char* (*)(char data[75*2 + 8]))GetSADataFunc(2);
+	}
+	if (!export_sa_setreq) {
+		export_sa_setreq = (void (*)(int))GetSADataFunc(1);
+	}
 
 	HDC hdcVis = CreateCompatibleDC(NULL);
-	HBITMAP hbmVis = CreateCompatibleBitmap(hdc, 75, 40);
+	HBITMAP hbmVis = CreateCompatibleBitmap(hdc, r.right, r.bottom);
 	HBITMAP holdbmVis = (HBITMAP)SelectObject(hdcVis, hbmVis);
 
 	/* Create the pen for the line drawings */
 	HPEN holdpenVis = (HPEN)SelectObject(hdcVis, hpenVis);
 
 	/* Specify, that we want both spectrum and oscilloscope data */
-	export_sa_setreq(1); /* Pass 0 (zero) and get spectrum data only */
-	char *sadata = export_sa_get(); // Visualization data
+	if (export_sa_setreq) export_sa_setreq(1); /* Pass 0 (zero) and get spectrum data only */
+
+	static char data[75*2 + 8];
+	// no need to query for the vis data if we're paused
+	// as it shouldn't be changing & we can use the last
+	// vis data that was received for drawing when paused
+	char *sadata = (export_sa_get && !is_paused ? export_sa_get(data) : data); // Visualization data
 
 	/* Clear background */
-	FillRect(hdcVis, &r, hbrBkGnd);
+	FillRect(hdcVis, &r, WADlg_getBrush(WADLG_ITEMBG_BRUSH));
 
 	/* Render the oscilloscope */
-	if ((config_vismode & NXSBCVM_OSC) == NXSBCVM_OSC) {
-		MoveToEx(hdcVis, r.left-1, r.top + 20, NULL);
-		for (int x = 0; x < 75; x++)
-			LineTo(hdcVis, r.left+x, (r.top+20) + sadata[75+x]);
+	if (sadata) {
+		if ((config_vismode & NXSBCVM_OSC) == NXSBCVM_OSC) {
+			// this is not 'exact' but it'll do for the moment
+			const int interval = (int)ceil(r.right / 75.0f),
+					  top = ((r.bottom) / 2),
+					  scaling = (int)ceil((top + 40) / 40.0f);
+			MoveToEx(hdcVis, r.left-1, r.top + top, NULL);
+			for (int x = 0; x < 75; x++) {
+				LineTo(hdcVis, r.left+(x*interval), (r.top+top) + (sadata[75+x] * scaling));
+			}
+		}
 	}
 
 	if ((config_vismode & NXSBCVM_SPEC) == NXSBCVM_SPEC) {
-		rVis.top = 0;
-		rVis.left = 0;
-		rVis.right = 75;
-		rVis.bottom = 40;
+		RECT rVis={0,0,r.right,r.bottom};
 		DrawAnalyzer(hdcVis, rVis, sadata);
 	}
 
 	SelectObject(hdcVis, holdpenVis);
 
 	// Blit to screen
-	GdiAlphaBlend(hdc, r.left, r.top, r.right, r.bottom, hdcVis, 0, 0, 75, 40, bf);
+	GdiAlphaBlend(hdc, r.left, r.top, r.right, r.bottom,
+				  hdcVis, 0, 0, r.right, r.bottom, bf);
 
 	// Destroy vis bitmap/DC
 	SelectObject(hdcVis, holdbmVis);
@@ -934,42 +1086,94 @@ void DrawAnalyzer(HDC hdc, RECT r, char *sadata)
 	static char safalloff[150];
 	static char sapeaksdec[150];
 
+	// this is not 'exact' but it'll do for the moment
+	const int interval = (int)ceil(r.right / 75.0f),
+			  scaling = (int)ceil((r.bottom - 40) / 40.0f);
 	for (int x = 0; x < 75; x++)
 	{
 		/* Fix peaks & falloff */
-		if (sadata[x] > sapeaks[x])
-		{
+		if (sadata[x] > sapeaks[x]) {
 			sapeaks[x] = sadata[x];
 			sapeaksdec[x] = 0;
 		}
-		else
-		{
+		else {
 			sapeaks[x] = sapeaks[x] - 1;
 
-			if (sapeaksdec[x] >= 8)
+			if (sapeaksdec[x] >= 8) {
 				sapeaks[x] = (char)(int)(sapeaks[x] - 0.3 * (sapeaksdec[x] - 8));
-
-			if (sapeaks[x] < 0)
+			}
+			if (sapeaks[x] < 0) {
 				sapeaks[x] = 0;
-			else
+			}
+			else {
 				sapeaksdec[x] = sapeaksdec[x] + 1;
+			}
 		}
 
-		if (sadata[x] > safalloff[x]) safalloff[x] = sadata[x];
-		else safalloff[x] = safalloff[x] - 2;
+		if (sadata[x] > safalloff[x]) {
+			safalloff[x] = sadata[x];
+		}
+		else {
+			safalloff[x] = safalloff[x] - 2;
+		}
 
-		MoveToEx(hdc, r.left+x, r.bottom, NULL);
-		LineTo(hdc, r.left+x, r.bottom - safalloff[x]);
+		/*MoveToEx(hdc, r.left+(x*interval), r.bottom, NULL);
+		LineTo(hdc, r.left+(x*interval), r.bottom - safalloff[x]);
 
 		// Draw peaks
-		MoveToEx(hdc, r.left+x, r.bottom - safalloff[x], NULL);
-		LineTo(hdc, r.left+x, r.bottom - safalloff[x]);
+		MoveToEx(hdc, r.left+(x*interval), r.bottom - safalloff[x], NULL);
+		LineTo(hdc, r.left+(x*interval), r.bottom - safalloff[x]);*/
+
+		// Draw peaks as bars to better fill the window space whilst
+		// not doing a 75px wide image upscaled (which really sucks)
+		const RECT peak = {r.left+(x*interval)+1, r.bottom - (safalloff[x] * scaling),
+						   r.left+((x+1)*interval)-1, r.bottom};
+		FillRect(hdc, &peak, WADlg_getBrush(WADLG_ITEMFG_BRUSH));
 	}
 }
 
-LRESULT CALLBACK GenWndSubclass(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+LRESULT CALLBACK GenWndSubclass(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
+								UINT_PTR uIdSubclass, DWORD_PTR dwRefData)
 {
 	switch (uMsg) {
+	case WM_USER+0x99:
+		{
+			const int old_dsize = dsize;
+			dsize = wParam;
+			upscaling = lParam;
+
+			// TODO need to improve this...
+			if (upscaling)
+			{
+				if (dsize)
+				{
+					if (old_dsize && (dsize != old_dsize))
+					{
+						const int scale = (1 + old_dsize);
+						lfDisplay.lfHeight /= scale;
+						lfMode.lfHeight /= scale;
+					}
+
+					if (!old_dsize || (dsize == old_dsize))
+					{
+						lfDisplay.lfHeight *= (1 + dsize);
+						lfMode.lfHeight *= (1 + dsize);
+					}
+				}
+				else
+				{
+					if (old_dsize)
+					{
+						const int scale = (1 + old_dsize);
+						lfDisplay.lfHeight /= scale;
+						lfMode.lfHeight /= scale;
+					}
+				}
+			}
+
+			UpdateSkinParts();
+		}
+		return 0;
 	case WM_LBUTTONDOWN:
 		{
 			if (!config_freeze) {
@@ -995,17 +1199,17 @@ LRESULT CALLBACK GenWndSubclass(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 		}
 		return 0;
 	}
-	return CallWindowProc(lpGenWndProcOld, hwnd, uMsg, wParam, lParam);
+	return DefSubclass(hwnd, uMsg, wParam, lParam);
 }
 
-void InsertMenuItemInWinamp()
+void InsertMenuItemInWinamp(void)
 {
 	int i;
 	HMENU WinampMenu;
 	UINT id;
 
 	// get main menu
-	WinampMenu = (HMENU)SendMessage(plugin.hwndParent, WM_WA_IPC, 0, IPC_GET_HMENU);
+	WinampMenu = GetNativeMenu((WPARAM)0);
 
 	// find menu item "main window"
 	for (i=GetMenuItemCount(WinampMenu); i>=0; i--)
@@ -1025,53 +1229,15 @@ void InsertMenuItemInWinamp()
 	}
 }
 
-void RemoveMenuItemFromWinamp()
+void RemoveMenuItemFromWinamp(void)
 {
-	HMENU WinampMenu;
-	WinampMenu = (HMENU)SendMessage(plugin.hwndParent, WM_WA_IPC, 0, IPC_GET_HMENU);
+	HMENU WinampMenu = GetNativeMenu((WPARAM)0);
 	RemoveMenu(WinampMenu, WINAMP_NXS_BIG_CLOCK_MENUID, MF_BYCOMMAND);
 }
 
-
-/* Creates a URL file and executes it.
-   Returns 1 if everything was okey! */
-int ExecuteURL(wchar_t *url)
-{
-	HANDLE hf;
-	wchar_t szTmp[4096];
-	DWORD written;
-	int hinst;
-	wchar_t szName[MAX_PATH+1];
-	wchar_t szTempPath[MAX_PATH+1];
-	wchar_t *p;
-
-	GetTempPath(MAX_PATH, szTempPath);
-	GetTempFileName(szTempPath, L"lnk", 0, szName);
-	DeleteFile(szName);
-	/* We got a temporary filename, change the extension to ".URL" */
-	p = szName;
-	while (*p) ++p; /*go to end*/
-	while (p >= szName && *p != L'.') --p;
-	*p = 0;
-	StringCchCat(szName, ARRAYSIZE(szName), L".URL");
-
-
-	hf = CreateFile(szName, /*GENERIC_READ|*/GENERIC_WRITE,
-		FILE_SHARE_DELETE, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-
-	StringCchPrintf(szTmp, ARRAYSIZE(szTmp), L"[InternetShortcut]\r\nurl=%s\r\n", url);
-	WriteFile(hf, szTmp, lstrlen(szTmp), &written, NULL);
-	CloseHandle(hf);
-	hinst = (int)ShellExecute(0, L"open", szName, NULL, NULL, SW_SHOWNORMAL);
-	DeleteFile(szName);
-	return (written && hinst>32);
-}
-
-
-extern "C" __declspec (dllexport) winampGeneralPurposePlugin * winampGetGeneralPurposePlugin() {
+extern "C" __declspec (dllexport) winampGeneralPurposePlugin * winampGetGeneralPurposePlugin(void) {
 	return &plugin;
 }
-
 
 extern "C" __declspec(dllexport) int winampUninstallPlugin(HINSTANCE hDllInst, HWND hwndDlg, int param)
 {
@@ -1079,24 +1245,10 @@ extern "C" __declspec(dllexport) int winampUninstallPlugin(HINSTANCE hDllInst, H
 	if (MessageBox(hwndDlg, WASABI_API_LNGSTRINGW(IDS_DO_YOU_ALSO_WANT_TO_REMOVE_SETTINGS),
 				   (LPWSTR)plugin.description, MB_YESNO | MB_DEFBUTTON2) == IDYES)
 	{
-		WritePrivateProfileString(PLUGIN_INISECTION, 0, 0, ini_file);
+		SaveNativeIniString(WINAMP_INI, PLUGIN_INISECTION, 0, 0);
 		no_uninstall = 0;
 	}
 
 	// as we're doing too much in subclasses, etc we cannot allow for on-the-fly removal so need to do a normal reboot
 	return GEN_PLUGIN_UNINSTALL_REBOOT;
 }
-
-
-/* makes a smaller DLL file */
-
-#ifndef _DEBUG
-BOOL WINAPI _DllMainCRTStartup(HINSTANCE hModule, DWORD ul_reason_for_call, LPVOID lpReserved)
-{
-	if (ul_reason_for_call == DLL_PROCESS_ATTACH)
-	{
-		DisableThreadLibraryCalls(hModule);
-	}
-	return TRUE;
-}
-#endif

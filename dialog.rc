@@ -13,13 +13,11 @@
 #undef APSTUDIO_READONLY_SYMBOLS
 
 /////////////////////////////////////////////////////////////////////////////
-// Norwegian (Bokmal) resources
+// English (United Kingdom) resources
 
-#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_NOR)
-#ifdef _WIN32
-LANGUAGE LANG_NORWEGIAN, SUBLANG_NORWEGIAN_BOKMAL
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENG)
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_UK
 #pragma code_page(1252)
-#endif //_WIN32
 
 #ifdef APSTUDIO_INVOKED
 /////////////////////////////////////////////////////////////////////////////
@@ -46,25 +44,13 @@ END
 
 #endif    // APSTUDIO_INVOKED
 
-#endif    // Norwegian (Bokmal) resources
-/////////////////////////////////////////////////////////////////////////////
-
-
-/////////////////////////////////////////////////////////////////////////////
-// English (U.K.) resources
-
-#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENG)
-#ifdef _WIN32
-LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_UK
-#pragma code_page(1252)
-#endif //_WIN32
 
 /////////////////////////////////////////////////////////////////////////////
 //
 // Menu
 //
 
-IDR_CONTEXTMENU MENU 
+IDR_CONTEXTMENU MENU
 BEGIN
     POPUP "contextmenu"
     BEGIN
@@ -74,6 +60,7 @@ BEGIN
         MENUITEM "&Playlist Elapsed",           ID_CONTEXTMENU_PLAYLISTELAPSED
         MENUITEM "P&laylist Remaining",         ID_CONTEXTMENU_PLAYLISTREMAINING
         MENUITEM "&Time of day",                ID_CONTEXTMENU_TIMEOFDAY
+        MENUITEM "&.beat time",                 ID_CONTEXTMENU_BEATSTIME
         MENUITEM SEPARATOR
         MENUITEM "&Show display mode",          ID_CONTEXTMENU_SHOWDISPLAYMODE
         MENUITEM "S&hadowed text",              ID_CONTEXTMENU_SHADOWEDTEXT
@@ -83,10 +70,11 @@ BEGIN
         MENUITEM "Display mode fo&nt...",       ID_CONTEXTMENU_DISPLAYMODEFONT
         MENUITEM "&Reset fonts...",             ID_CONTEXTMENU_RESETFONTS
         MENUITEM SEPARATOR
-        POPUP "&Visualizations"
+        POPUP "&Visualisations"
         BEGIN
+            MENUITEM "&None",                       ID_CONTEXTMENU_NONE
             MENUITEM "&Oscilloscope",               ID_CONTEXTMENU_SHOWOSC
-            MENUITEM "Spectrum &analyzer",          ID_CONTEXTMENU_SHOWSPEC
+            MENUITEM "Spectrum &analyser",          ID_CONTEXTMENU_SHOWSPEC
         END
         MENUITEM SEPARATOR
         MENUITEM "&Freeze window",              ID_CONTEXTMENU_FREEZE
@@ -102,8 +90,8 @@ END
 //
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 1,0,3,0
- PRODUCTVERSION 1,0,3,0
+ FILEVERSION 1,6,1,0
+ PRODUCTVERSION 1,6,1,0
  FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -118,13 +106,14 @@ BEGIN
     BEGIN
         BLOCK "080004b0"
         BEGIN
+            VALUE "CompanyName", "WACUP (WinAmp Community Update Project)"
             VALUE "FileDescription", "Winamp General Purpose Plug-in"
-            VALUE "FileVersion", "1, 0, 3, 0"
+            VALUE "FileVersion", "1.6.1.0"
             VALUE "InternalName", "gen_bigclock.dll"
-            VALUE "LegalCopyright", "Copyright © 2004-5 Saivert, Updated by Sebastian Pipping (2006), Addtional updates by Darren Owen aka DrO (2016)"
+            VALUE "LegalCopyright", "Copyright © 2004-5 Saivert, Updated by Sebastian Pipping (2006), Addtional updates by Darren Owen aka DrO (2016-2021)"
             VALUE "OriginalFilename", "gen_bigclock.dll"
             VALUE "ProductName", "Big Clock"
-            VALUE "ProductVersion", "1, 0, 3, 0"
+            VALUE "ProductVersion", "1.6.1.0"
         END
     END
     BLOCK "VarFileInfo"
@@ -139,7 +128,7 @@ END
 // Accelerator
 //
 
-IDR_ACCELERATOR_WND ACCELERATORS 
+IDR_ACCELERATOR_WND ACCELERATORS
 BEGIN
     VK_RIGHT,       WINAMP_FFWD5S,          VIRTKEY, NOINVERT
     VK_LEFT,        WINAMP_REW5S,           VIRTKEY, NOINVERT
@@ -153,12 +142,12 @@ END
 // String Table
 //
 
-STRINGTABLE 
+STRINGTABLE
 BEGIN
     IDS_PLUGIN_NAME         "Big Clock v%s"
     IDS_DO_YOU_ALSO_WANT_TO_REMOVE_SETTINGS 
                             "Do you also want to remove the saved settings for this plug-in?"
-    IDS_ABOUT_STRING        "This provides a separate time window with a range\nof display modes as well as simple visualisations.\n\nPlug-in originally by saivert (https://saivert.com/)\n\nUpdated by Sebastian Pipping (https://www.hartwork.org/)\n\nAdditional updates for Winamp v5.66x by Darren Owen aka DrO\n\nSee https://getwinamp.com/wacup/plugins/big_clock for\nupdates and also the source code as per the GPLv2 license.\n\nBuild date: %s"
+    IDS_ABOUT_STRING        "This provides a separate time window with a range\nof display modes as well as simple visualisations.\n\nPlug-in originally by saivert (https://saivert.com/)\n\nUpdated by Sebastian Pipping (https://www.hartwork.org/)\n\nAdditional updates for WACUP by Darren Owen aka DrO\n\nSee https://getwacup.com/plugins/big_clock for\nupdates and also the source code as per the GPLv2 license.\n\nBuild date: %s"
     IDS_GHK_STRING          "Big Clock: Toggle Big Clock window"
     IDS_NXS_BIG_CLOCK       "Big Clock"
     IDS_ELAPSED             "Elapsed"
@@ -167,14 +156,16 @@ BEGIN
     IDS_PLAYLIST_REMAINING  "Playlist Remaining"
     IDS_TIME_OF_DAY         "Time of day"
     IDS_RESET_FONTS         "Are you sure you want to reset the fonts back to their default values?"
+    IDS_CALCULATING         "Calculating..."
+    IDS_BEATS_TIME          ".beats"
 END
 
-STRINGTABLE 
+STRINGTABLE
 BEGIN
     65535                   "{DF6F9C93-155C-4d01-BF5A-17612EDBFC4C}"
 END
 
-#endif    // English (U.K.) resources
+#endif    // English (United Kingdom) resources
 /////////////////////////////////////////////////////////////////////////////
 
 
