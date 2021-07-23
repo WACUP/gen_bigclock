@@ -34,7 +34,8 @@
 
 //#define USE_COMCTL_DRAWSHADOWTEXT
 
-#include "windows.h"
+#include <windows.h>
+#include <windowsx.h>
 #include <commctrl.h>
 #include <shellapi.h>
 #include <commdlg.h>
@@ -61,7 +62,7 @@
 /* global data */
 static const wchar_t szAppName[] = L"NxS BigClock";
 #define PLUGIN_INISECTION szAppName
-#define PLUGIN_VERSION "1.6.1"
+#define PLUGIN_VERSION "1.6.2"
 
 // Menu ID's
 UINT WINAMP_NXS_BIG_CLOCK_MENUID = (ID_GENFF_LIMIT+101);
@@ -761,12 +762,13 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 		{
 			if ((HWND)wParam!=hWnd) break;
 
-			POINT pt = {0};
-			if (LOWORD(lParam) == -1 && HIWORD(lParam) == -1) {
-				pt.x = pt.y = 1;
-				ClientToScreen(hWnd, &pt);
-			} else {
-				GetCursorPos(&pt);
+			int x = GET_X_LPARAM(lParam), y = GET_Y_LPARAM(lParam);
+			if ((x == -1) || (y == -1)) // x and y are -1 if the user invoked a shift-f10 popup menu
+			{
+				RECT itemRect = { 0 };
+				GetWindowRect(hWnd, &itemRect);
+				x = itemRect.left;
+				y = itemRect.top;
 			}
 
 			if (!g_hPopupMenu) {
@@ -799,7 +801,7 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 
 			CheckMenuRadioItem(g_hPopupMenu, ID_CONTEXTMENU_DISABLED, ID_CONTEXTMENU_BEATSTIME,
 				ID_CONTEXTMENU_DISABLED+config_displaymode, MF_BYCOMMAND|MF_CHECKED);
-			TrackPopup(g_hPopupMenu, TPM_LEFTBUTTON, pt.x, pt.y, hWnd);
+			TrackPopup(g_hPopupMenu, TPM_LEFTBUTTON, x, y, hWnd);
 		}
 		break;
 	case WM_USER+0x202:	// WM_DISPLAYCHANGE / IPC_SKIN_CHANGED_NEW / ML_MSG_SKIN_CHANGED
