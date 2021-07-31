@@ -90,8 +90,8 @@ END
 //
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 1,6,2,0
- PRODUCTVERSION 1,6,2,0
+ FILEVERSION 1,6,3,0
+ PRODUCTVERSION 1,6,3,0
  FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -108,12 +108,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "WACUP (WinAmp Community Update Project)"
             VALUE "FileDescription", "Winamp General Purpose Plug-in"
-            VALUE "FileVersion", "1.6.2.0"
+            VALUE "FileVersion", "1.6.3.0"
             VALUE "InternalName", "gen_bigclock.dll"
             VALUE "LegalCopyright", "Copyright © 2004-5 Saivert, Updated by Sebastian Pipping (2006), Addtional updates by Darren Owen aka DrO (2016-2021)"
             VALUE "OriginalFilename", "gen_bigclock.dll"
             VALUE "ProductName", "Big Clock"
-            VALUE "ProductVersion", "1.6.2.0"
+            VALUE "ProductVersion", "1.6.3.0"
         END
     END
     BLOCK "VarFileInfo"

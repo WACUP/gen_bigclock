@@ -62,7 +62,7 @@
 /* global data */
 static const wchar_t szAppName[] = L"NxS BigClock";
 #define PLUGIN_INISECTION szAppName
-#define PLUGIN_VERSION "1.6.2"
+#define PLUGIN_VERSION "1.6.3"
 
 // Menu ID's
 UINT WINAMP_NXS_BIG_CLOCK_MENUID = (ID_GENFF_LIMIT+101);
@@ -97,6 +97,10 @@ static LOGFONT lfDisplay = {0}, lfMode = {0};
 static HANDLE CalcThread;
 static UINT pltime;
 static int prevplpos = -1, resetCalc = 0;
+
+// just using these to track the paused and playing states
+int is_paused = 0, is_playing = 0, plpos = 0, itemlen = 0;
+UINT pllen = 0;
 
 void DrawVisualization(HDC hdc, RECT r);
 void DrawAnalyzer(HDC hdc, RECT r, char *sadata);
@@ -186,6 +190,38 @@ void ReadFontSettings(void) {
 	GetNativeIniString(WINAMP_INI, PLUGIN_INISECTION, L"mf", L"Arial", lfMode.lfFaceName, LF_FACESIZE);
 }
 
+void CALLBACK UpdateWnTimerProc(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
+	if ((idEvent == UPDATE_TIMER_ID) && IsWindowVisible(hWnd)) {
+		InvalidateRect(hWnd, NULL, FALSE);
+	}
+}
+
+void SaveDisplayMode(void) {
+	SaveNativeIniInt(WINAMP_INI, PLUGIN_INISECTION, L"config_displaymode", config_displaymode);
+
+	// for the time of day we need to ensure it's running
+	// regularly otherwise it'll only be updated if playing
+	if ((config_displaymode == NXSBCDM_TIMEOFDAY) ||
+		(config_displaymode == NXSBCDM_BEATSTIME)) {
+		if (!is_playing) {
+			SetTimer(g_BigClockWnd, UPDATE_TIMER_ID, (config_centi ? UPDATE_TIMER : 1000), UpdateWnTimerProc);
+		}
+	}
+	else {
+		if (!is_playing) {
+			KillTimer(g_BigClockWnd, UPDATE_TIMER_ID);
+			InvalidateRect(g_BigClockWnd, NULL, FALSE);
+		}
+
+		// if changing to the playlist elapsed / remaining
+		// modes then trigger a (re-)calcuation of the info
+		if ((config_displaymode == NXSBCDM_PLELAPSED) ||
+			(config_displaymode == NXSBCDM_PLREMAINING)) {
+			prevplpos = -1;
+		}
+	}
+}
+
 bool ProcessMenuResult(UINT command, HWND parent) {
 	switch (LOWORD(command)) {
 		case ID_CONTEXTMENU_DISABLED:
@@ -196,7 +232,7 @@ bool ProcessMenuResult(UINT command, HWND parent) {
 		case ID_CONTEXTMENU_TIMEOFDAY:
 		case ID_CONTEXTMENU_BEATSTIME:
 			config_displaymode = LOWORD(command)-ID_CONTEXTMENU_DISABLED;
-			SaveNativeIniInt(WINAMP_INI, PLUGIN_INISECTION, L"config_displaymode", config_displaymode);
+			SaveDisplayMode();
 			break;
 		case ID_CONTEXTMENU_SHOWDISPLAYMODE:
 			config_showdisplaymode = !config_showdisplaymode;
@@ -416,17 +452,6 @@ int init(void) {
 	return GEN_INIT_FAILURE;*/
 }
 
-// just using these to track the paused and playing states
-int is_paused = 0, is_playing = 0, plpos = 0, itemlen = 0;
-UINT pllen = 0;
-
-void CALLBACK UpdateWnTimerProc(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
-	if ((idEvent == UPDATE_TIMER_ID) && IsWindowVisible(hWnd)) {
-		InvalidateRect(hWnd, NULL, FALSE);
-	}
-}
-
-
 void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 						 WPARAM wParam, const LPARAM lParam)
 {
@@ -536,9 +561,13 @@ void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 			}
 		}
 		// this is sent after IPC_PLAYING_FILE on 5.3+ clients
-		else if (lParam == IPC_PLAYING_FILEW) {
-			is_paused = 0;
-			is_playing = 1;
+		else if (lParam == IPC_PLAYING_FILEW ||
+				 lParam == IPC_PLAYLIST_ITEM_REMOVED) {
+			if (lParam == IPC_PLAYING_FILEW) {
+				is_paused = 0;
+				is_playing = 1;
+			}
+
 			pllen = GetPlaylistLength();
 			plpos = GetPlaylistPosition();
 			itemlen = GetCurrentTrackLengthMilliSeconds();
@@ -723,29 +752,7 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 			}
 		}
 
-		SaveNativeIniInt(WINAMP_INI, PLUGIN_INISECTION, L"config_displaymode", config_displaymode);
-
-		// for the time of day we need to ensure it's running
-		// regularly otherwise it'll only be updated if playing
-		if ((config_displaymode == NXSBCDM_TIMEOFDAY) ||
-			(config_displaymode == NXSBCDM_BEATSTIME)) {
-			if (!is_playing) {
-				SetTimer(g_BigClockWnd, UPDATE_TIMER_ID, (config_centi ? UPDATE_TIMER : 1000), UpdateWnTimerProc);
-			}
-		}
-		else {
-			if (!is_playing) {
-				KillTimer(g_BigClockWnd, UPDATE_TIMER_ID);
-				InvalidateRect(g_BigClockWnd, NULL, FALSE);
-			}
-
-			// if changing to the playlist elapsed / remaining
-			// modes then trigger a (re-)calcuation of the info
-			if ((config_displaymode == NXSBCDM_PLELAPSED) ||
-				(config_displaymode == NXSBCDM_PLREMAINING)) {
-				prevplpos = -1;
-			}
-		}
+		SaveDisplayMode();
 		return 0;
 	case WM_COMMAND:	// for what's handled from the accel table
 		if (ProcessMenuResult(wParam, hWnd))
