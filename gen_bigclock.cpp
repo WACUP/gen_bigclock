@@ -62,7 +62,7 @@
 /* global data */
 static const wchar_t szAppName[] = L"NxS BigClock";
 #define PLUGIN_INISECTION szAppName
-#define PLUGIN_VERSION "1.6.3"
+#define PLUGIN_VERSION "1.7.1"
 
 // Menu ID's
 UINT WINAMP_NXS_BIG_CLOCK_MENUID = (ID_GENFF_LIMIT+101);
@@ -87,6 +87,7 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 static HMENU g_hPopupMenu = 0;
 static LPARAM ipc_bigclockinit = -1;
 static genHotkeysAddStruct genhotkey = {0};
+static UINT hotkey_ipc = (UINT)-1;
 static ATOM wndclass = 0;
 static HWND hWndBigClock = NULL;
 static embedWindowState embed = {0};
@@ -298,7 +299,7 @@ bool ProcessMenuResult(UINT command, HWND parent) {
 
 					// handle double-size mode as required by auto-scaling the font if its needed
 					if (upscaling && dsize) {
-						SendMessage(hWndBigClock, WM_USER + 0x99, (WPARAM)dsize, (LPARAM)upscaling);
+						SendMessage(g_BigClockWnd, WM_USER + 0x99, (WPARAM)dsize, (LPARAM)upscaling);
 					}
 					else {
 						UpdateSkinParts();
@@ -346,7 +347,7 @@ reparse:
 
 				// handle double-size mode as required by auto-scaling the font if its needed
 				if (upscaling && dsize) {
-					SendMessage(hWndBigClock, WM_USER + 0x99, (WPARAM)dsize, (LPARAM)upscaling);
+					SendMessage(g_BigClockWnd, WM_USER + 0x99, (WPARAM)dsize, (LPARAM)upscaling);
 				}
 				else {
 					UpdateSkinParts();
@@ -357,6 +358,12 @@ reparse:
 		case ID_CONTEXTMENU_FREEZE:
 			config_freeze = !config_freeze;
 			SaveNativeIniInt(WINAMP_INI, PLUGIN_INISECTION, L"config_freeze", config_freeze);
+			if (config_freeze) {
+				Subclass(hWndBigClock, GenWndSubclass);
+			}
+			else {
+				UnSubclass(hWndBigClock, GenWndSubclass);
+			}
 			break;
 		case ID_CONTEXTMENU_ABOUT:
 		{
@@ -452,6 +459,16 @@ int init(void) {
 	return GEN_INIT_FAILURE;*/
 }
 
+LRESULT HotkeyCallback(HWND hWnd, const UINT uMsg, const
+					   WPARAM wParam, const LPARAM lParam)
+{
+	if (uMsg == (UINT)hotkey_ipc)
+	{
+		PostMessage(hWnd, WM_COMMAND, WINAMP_NXS_BIG_CLOCK_MENUID, 0);
+	}
+	return 0;
+}
+
 void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 						 WPARAM wParam, const LPARAM lParam)
 {
@@ -491,8 +508,10 @@ void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 			embed.flags |= EMBED_FLAGS_SCALEABLE_WND;	// double-size support!
 			hWndBigClock = CreateEmbeddedWindow(&embed, embed_guid);
 
-			/* Subclass skinned window frame */
+			/* Subclass skinned window frame but only if it's needed for the window freezing*/
+			if (config_freeze) {
 			Subclass(hWndBigClock, GenWndSubclass);
+			}
 
 			// once the window is created we can then specify the window title and menu integration
 			SetWindowText(hWndBigClock, WASABI_API_LNGSTRINGW(IDS_NXS_BIG_CLOCK));
@@ -516,28 +535,17 @@ void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 			{
 				SetEmbeddedWindowMinimizedMode(hWndBigClock, TRUE);
 			}
-			else
+			/*else
 			{
 				// only show on startup if under a classic skin and was set
 				if (visible)
 				{
 					PostMessage(hWndBigClock, WM_USER + 102, 0, 0);
 				}
-			}
+			}*/
 
-			/* Get message value */
-			UINT genhotkeys_add_ipc = RegisterIPC((WPARAM)&"GenHotkeysAdd");
-
-			/* Set up the genHotkeysAddStruct */
-			genhotkey.name = (char*)WASABI_API_LNGSTRINGW_DUP(IDS_GHK_STRING);
-			genhotkey.flags = HKF_NOSENDMSG | HKF_UNICODE_NAME;
-			genhotkey.id = "NxSBigClockToggle";
-			// get this to send a WM_COMMAND message so we don't have to do anything specific
-			genhotkey.uMsg = WM_COMMAND;
-			genhotkey.wParam = MAKEWPARAM(WINAMP_NXS_BIG_CLOCK_MENUID, 0);
-			genhotkey.lParam = 0;
-			genhotkey.wnd = g_BigClockWnd;
-			PostMessage(plugin.hwndParent, WM_WA_IPC, (WPARAM)&genhotkey, genhotkeys_add_ipc);
+			AddGlobalHotkey(&genhotkey, WASABI_API_LNGSTRINGW_DUP(IDS_GHK_STRING),
+							"NxSBigClockToggle", &hotkey_ipc, 0, 0, HotkeyCallback);
 
 			// ensure we've got current states as due to how the load
 			// can happen, it's possible to not catch the play event.
@@ -558,6 +566,15 @@ void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 				if (is_playing) {
 					SetTimer(g_BigClockWnd, UPDATE_TIMER_ID, UPDATE_TIMER, UpdateWnTimerProc);
 				}
+			}
+		}
+		else if (lParam == IPC_GET_EMBEDIF_NEW_HWND)
+		{
+			if (((HWND)wParam == hWndBigClock) && visible &&
+				(InitialShowState() != SW_SHOWMINIMIZED))
+			{
+				// only show on startup if under a classic skin and was set
+				PostMessage(hWndBigClock, WM_USER + 102, 0, 0);
 			}
 		}
 		// this is sent after IPC_PLAYING_FILE on 5.3+ clients
@@ -714,7 +731,7 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 		{
 			// handle double-size mode as required by auto-scaling the font if its needed
 			if (upscaling && dsize) {
-				SendMessage(hWndBigClock, WM_USER + 0x99, (WPARAM)dsize, (LPARAM)upscaling);
+				SendMessage(hWnd, WM_USER + 0x99, (WPARAM)dsize, (LPARAM)upscaling);
 			}
 			else {
 				UpdateSkinParts();
@@ -811,6 +828,44 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 			TrackPopup(g_hPopupMenu, TPM_LEFTBUTTON, x, y, hWnd);
 		}
 		break;
+	case WM_USER+0x99:
+		{
+			const int old_dsize = dsize;
+			dsize = wParam;
+			upscaling = lParam;
+
+			// TODO need to improve this...
+			if (upscaling)
+			{
+				if (dsize)
+				{
+					if (old_dsize && (dsize != old_dsize))
+					{
+						const int scale = (1 + old_dsize);
+						lfDisplay.lfHeight /= scale;
+						lfMode.lfHeight /= scale;
+					}
+
+					if (!old_dsize || (dsize == old_dsize))
+					{
+						lfDisplay.lfHeight *= (1 + dsize);
+						lfMode.lfHeight *= (1 + dsize);
+					}
+				}
+				else
+				{
+					if (old_dsize)
+					{
+						const int scale = (1 + old_dsize);
+						lfDisplay.lfHeight /= scale;
+						lfMode.lfHeight /= scale;
+					}
+				}
+			}
+
+			UpdateSkinParts();
+			break;
+		}
 	case WM_USER+0x202:	// WM_DISPLAYCHANGE / IPC_SKIN_CHANGED_NEW / ML_MSG_SKIN_CHANGED
 		{
 			// make sure we catch all appropriate skin changes
@@ -1145,49 +1200,11 @@ LRESULT CALLBACK GenWndSubclass(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 								UINT_PTR uIdSubclass, DWORD_PTR dwRefData)
 {
 	switch (uMsg) {
-	case WM_USER+0x99:
-		{
-			const int old_dsize = dsize;
-			dsize = wParam;
-			upscaling = lParam;
-
-			// TODO need to improve this...
-			if (upscaling)
-			{
-				if (dsize)
-				{
-					if (old_dsize && (dsize != old_dsize))
-					{
-						const int scale = (1 + old_dsize);
-						lfDisplay.lfHeight /= scale;
-						lfMode.lfHeight /= scale;
-					}
-
-					if (!old_dsize || (dsize == old_dsize))
-					{
-						lfDisplay.lfHeight *= (1 + dsize);
-						lfMode.lfHeight *= (1 + dsize);
-					}
-				}
-				else
-				{
-					if (old_dsize)
-					{
-						const int scale = (1 + old_dsize);
-						lfDisplay.lfHeight /= scale;
-						lfMode.lfHeight /= scale;
-					}
-				}
-			}
-
-			UpdateSkinParts();
-		}
-		return 0;
 	case WM_LBUTTONDOWN:
 		{
-			if (!config_freeze) {
+			/*if (!config_freeze) {
 				break;
-			}
+			}*/
 
 			// Ctrl down?
 			if ((GetKeyState(VK_CONTROL) & 0x8000) != 0) {
