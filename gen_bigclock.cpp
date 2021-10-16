@@ -104,7 +104,7 @@ int is_paused = 0, is_playing = 0, plpos = 0, itemlen = 0;
 UINT pllen = 0;
 
 void DrawVisualization(HDC hdc, RECT r);
-void DrawAnalyzer(HDC hdc, RECT r, char *sadata);
+void DrawAnalyzer(HDC hdc, RECT r, const char *sadata);
 
 DWORD WINAPI CalcLengthThread(LPVOID lp);
 DWORD_PTR CALLBACK ConfigDlgProc(HWND,UINT,WPARAM,LPARAM);
@@ -429,7 +429,7 @@ void quit(void) {
 		hfMode = NULL;
 	}
 
-	UnregisterClass(g_BigClockClassName, plugin.hDllInstance);
+	//UnregisterClass(g_BigClockClassName, plugin.hDllInstance);
 }
 
 int init(void) {
@@ -1081,9 +1081,7 @@ void DrawVisualization(HDC hdc, RECT r)
 {
 	BLENDFUNCTION bf={0,0,80,0};
 
-	// cppcheck-suppress nullPointerRedundantCheck
 	static char* (*export_sa_get)(char data[75*2 + 8]);
-	// cppcheck-suppress nullPointerRedundantCheck
 	static void (*export_sa_setreq)(int);
 
 	/* Get function pointers from Winamp */
@@ -1144,7 +1142,7 @@ void DrawVisualization(HDC hdc, RECT r)
 	DeleteDC(hdcVis);
 }
 
-void DrawAnalyzer(HDC hdc, RECT r, char *sadata)
+void DrawAnalyzer(HDC hdc, RECT r, const char *sadata)
 {
 	static char sapeaks[150];
 	static char safalloff[150];
