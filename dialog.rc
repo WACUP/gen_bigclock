@@ -66,6 +66,10 @@ BEGIN
         MENUITEM "S&hadowed text",              ID_CONTEXTMENU_SHADOWEDTEXT
         MENUITEM "Show &centiseconds",          ID_CONTEXTMENU_CENTI
         MENUITEM SEPARATOR
+        MENUITEM "Show seconds for time of day", ID_CONTEXTMENU_SHOWSECONDSFORTIMEOFDAY
+        MENUITEM "Show time of day as 24 hours", ID_CONTEXTMENU_SHOWTIMEOFDAYAS24HOURS
+        MENUITEM "Use a dot as PM indicator",   ID_CONTEXTMENU_USEADOTASPM
+        MENUITEM SEPARATOR
         MENUITEM "Main text f&ont...",          ID_CONTEXTMENU_MAINTEXTFONT
         MENUITEM "Display mode fo&nt...",       ID_CONTEXTMENU_DISPLAYMODEFONT
         MENUITEM "&Reset fonts...",             ID_CONTEXTMENU_RESETFONTS
@@ -90,8 +94,8 @@ END
 //
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 1,7,1,0
- PRODUCTVERSION 1,7,1,0
+ FILEVERSION 1,8,1,0
+ PRODUCTVERSION 1,8,1,0
  FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -108,12 +112,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "WACUP (WinAmp Community Update Project)"
             VALUE "FileDescription", "Winamp General Purpose Plug-in"
-            VALUE "FileVersion", "1.7.1.0"
+            VALUE "FileVersion", "1.8.1.0"
             VALUE "InternalName", "gen_bigclock.dll"
             VALUE "LegalCopyright", "Copyright © 2004-5 Saivert, Updated by Sebastian Pipping (2006), Addtional updates by Darren Owen aka DrO (2016-2021)"
             VALUE "OriginalFilename", "gen_bigclock.dll"
             VALUE "ProductName", "Big Clock"
-            VALUE "ProductVersion", "1.7.1.0"
+            VALUE "ProductVersion", "1.8.1.0"
         END
     END
     BLOCK "VarFileInfo"

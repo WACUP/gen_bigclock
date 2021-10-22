@@ -62,7 +62,7 @@
 /* global data */
 static const wchar_t szAppName[] = L"NxS BigClock";
 #define PLUGIN_INISECTION szAppName
-#define PLUGIN_VERSION "1.7.1"
+#define PLUGIN_VERSION "1.8.1"
 
 // Menu ID's
 UINT WINAMP_NXS_BIG_CLOCK_MENUID = (ID_GENFF_LIMIT+101);
@@ -124,6 +124,7 @@ static int config_shadowtextnew=FALSE;
 static int config_showdisplaymode=TRUE;
 static int config_vismode=TRUE;
 static int config_displaymode=NXSBCDM_ELAPSEDTIME;
+static int config_timeofdaymode=1 | 2;
 static int config_centi=1;
 static int config_freeze=0;
 
@@ -198,14 +199,20 @@ void CALLBACK UpdateWnTimerProc(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dw
 }
 
 void SaveDisplayMode(void) {
+	if (config_displaymode != NXSBCDM_ELAPSEDTIME) {
 	SaveNativeIniInt(WINAMP_INI, PLUGIN_INISECTION, L"config_displaymode", config_displaymode);
+	}
+	else {
+		SaveNativeIniString(WINAMP_INI, PLUGIN_INISECTION, L"config_displaymode", NULL);
+	}
 
 	// for the time of day we need to ensure it's running
 	// regularly otherwise it'll only be updated if playing
 	if ((config_displaymode == NXSBCDM_TIMEOFDAY) ||
 		(config_displaymode == NXSBCDM_BEATSTIME)) {
 		if (!is_playing) {
-			SetTimer(g_BigClockWnd, UPDATE_TIMER_ID, (config_centi ? UPDATE_TIMER : 1000), UpdateWnTimerProc);
+			SetTimer(g_BigClockWnd, UPDATE_TIMER_ID, ((config_vismode ||
+					 config_centi) ? UPDATE_TIMER : 1000), UpdateWnTimerProc);
 		}
 	}
 	else {
@@ -237,11 +244,13 @@ bool ProcessMenuResult(UINT command, HWND parent) {
 			break;
 		case ID_CONTEXTMENU_SHOWDISPLAYMODE:
 			config_showdisplaymode = !config_showdisplaymode;
-			SaveNativeIniInt(WINAMP_INI, PLUGIN_INISECTION, L"config_showdisplaymode", config_showdisplaymode);
+			SaveNativeIniString(WINAMP_INI, PLUGIN_INISECTION, L"config_showdisplaymode",
+								(config_showdisplaymode ? NULL : L"0"));
 			break;
 		case ID_CONTEXTMENU_SHADOWEDTEXT:
 			config_shadowtextnew = !config_shadowtextnew;
-			SaveNativeIniInt(WINAMP_INI, PLUGIN_INISECTION, L"config_shadowtextnew", config_shadowtextnew);
+			SaveNativeIniString(WINAMP_INI, PLUGIN_INISECTION, L"config_shadowtextnew",
+								(config_shadowtextnew ? L"1" : NULL));
 			break;
 		case ID_CONTEXTMENU_NONE:
 			config_vismode = 0;
@@ -257,7 +266,20 @@ bool ProcessMenuResult(UINT command, HWND parent) {
 			break;
 		case ID_CONTEXTMENU_CENTI:
 			config_centi = !config_centi;
-			SaveNativeIniInt(WINAMP_INI, PLUGIN_INISECTION, L"config_centi", config_centi);
+			SaveNativeIniString(WINAMP_INI, PLUGIN_INISECTION, L"config_centi",
+								(config_centi ? NULL : L"0"));
+			break;
+		case ID_CONTEXTMENU_SHOWSECONDSFORTIMEOFDAY:
+			config_timeofdaymode ^= 1;
+			SaveNativeIniInt(WINAMP_INI, PLUGIN_INISECTION, L"config_timeofdaymode", config_timeofdaymode);
+			break;
+		case ID_CONTEXTMENU_SHOWTIMEOFDAYAS24HOURS:
+			config_timeofdaymode ^= 2;
+			SaveNativeIniInt(WINAMP_INI, PLUGIN_INISECTION, L"config_timeofdaymode", config_timeofdaymode);
+			break;
+		case ID_CONTEXTMENU_USEADOTASPM:
+			config_timeofdaymode ^= 4;
+			SaveNativeIniInt(WINAMP_INI, PLUGIN_INISECTION, L"config_timeofdaymode", config_timeofdaymode);
 			break;
 		case ID_CONTEXTMENU_RESETFONTS:
 			{
@@ -357,7 +379,8 @@ reparse:
 		}
 		case ID_CONTEXTMENU_FREEZE:
 			config_freeze = !config_freeze;
-			SaveNativeIniInt(WINAMP_INI, PLUGIN_INISECTION, L"config_freeze", config_freeze);
+			SaveNativeIniString(WINAMP_INI, PLUGIN_INISECTION, L"config_freeze",
+								(config_freeze ? L"1" : NULL));
 			if (config_freeze) {
 				Subclass(hWndBigClock, GenWndSubclass);
 			}
@@ -482,6 +505,7 @@ void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 			GetNativeIniIntParam(WINAMP_INI, PLUGIN_INISECTION, L"config_displaymode", &config_displaymode);
 			GetNativeIniIntParam(WINAMP_INI, PLUGIN_INISECTION, L"config_centi", &config_centi);
 			GetNativeIniIntParam(WINAMP_INI, PLUGIN_INISECTION, L"config_freeze", &config_freeze);
+			GetNativeIniIntParam(WINAMP_INI, PLUGIN_INISECTION, L"config_timeofdaymode", &config_timeofdaymode);
 
 			ReadFontSettings();
 
@@ -559,7 +583,8 @@ void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 			if ((config_displaymode == NXSBCDM_TIMEOFDAY) ||
 				(config_displaymode == NXSBCDM_BEATSTIME)) {
 				if (!is_playing) {
-					SetTimer(g_BigClockWnd, UPDATE_TIMER_ID, (config_centi ? UPDATE_TIMER : 1000), UpdateWnTimerProc);
+					SetTimer(g_BigClockWnd, UPDATE_TIMER_ID, ((config_vismode ||
+							 config_centi) ? UPDATE_TIMER : 1000), UpdateWnTimerProc);
 				}
 			}
 			else {
@@ -598,8 +623,8 @@ void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 			if ((cur_playing == 1) && (GetCurrentTrackPos() > 0)) {
 				if (is_paused) {
 					is_paused = 0;
-
-					SetTimer(g_BigClockWnd, UPDATE_TIMER_ID, ((config_displaymode == NXSBCDM_TIMEOFDAY) ||
+					SetTimer(g_BigClockWnd, UPDATE_TIMER_ID, (!config_vismode &&
+							 (config_displaymode == NXSBCDM_TIMEOFDAY) ||
 							 (config_displaymode == NXSBCDM_BEATSTIME) ? (config_centi ?
 							 UPDATE_TIMER : 1000): UPDATE_TIMER), UpdateWnTimerProc);
 				}
@@ -640,9 +665,7 @@ void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 											 &embed, hWnd, uMsg, wParam, lParam);
 }
 
-int GetFormattedTime(LPWSTR lpszTime, UINT size, int iPos) {
-
-	wchar_t szFmt[] = L"%d:%.2d:%.2d\0";
+int GetFormattedTime(LPWSTR lpszTime, UINT size, int iPos, bool mode) {
 
 	double time_s = (iPos > 0 ? iPos*0.001 : 0);
 	int hours = (int)(time_s / 60 / 60) % 60;
@@ -653,14 +676,35 @@ int GetFormattedTime(LPWSTR lpszTime, UINT size, int iPos) {
 	time_s -= seconds;
 	int dsec = (int)(time_s*100);
 
+	if (!mode) {
+		const wchar_t szFmtFull[] = L"%d:%.2d:%.2d\0";
 	if (hours > 0) {
-		StringCchPrintf(lpszTime, size, szFmt, hours, minutes, seconds);
-	} else {
-		StringCchPrintf(lpszTime, size, szFmt+3, minutes, seconds);
+			StringCchPrintf(lpszTime, size, szFmtFull, hours, minutes, seconds);
+		}
+		else {
+			StringCchPrintf(lpszTime, size, szFmtFull + 3, minutes, seconds);
+		}
+	}
+	else {
+		const bool show_24hrs = (config_timeofdaymode & 2);
+		if (config_timeofdaymode & 1) {
+			const wchar_t szFmtFull[] = L"%d:%.2d:%.2d%s%s\0",
+						  szFmtFullCenti[] = L"%d:%.2d:%.2d.%.2d%s\0";
+			StringCchPrintf(lpszTime, size, (!config_centi ? szFmtFull : szFmtFullCenti),
+							(!show_24hrs && (hours > 12) ? (hours - 12) : hours), minutes, seconds,
+							(config_centi ? dsec : (int)L""), (show_24hrs ? L"" : (hours >= 12 ?
+							((config_timeofdaymode & 4) ? L" ." : L"pm") : L"am")));
+		}
+		else {
+			const wchar_t szFmtNoSec[] = L"%d:%.2d%s\0";
+			StringCchPrintf(lpszTime, size, szFmtNoSec, (!show_24hrs && (hours > 12) ?
+							(hours - 12) : hours), minutes, (show_24hrs ? L"" : (hours >= 12 ?
+							((config_timeofdaymode & 4) ? L" ." : L"pm") : L"am")));
+		}
 	}
 
-	if (config_centi) {
-		wchar_t szMsFmt[] = L".%.2d";
+	if (!mode && config_centi) {
+		const wchar_t szMsFmt[] = L".%.2d";
 		int offset = wcslen(lpszTime);
 		StringCchPrintf(lpszTime + offset, size - offset, szMsFmt, dsec);
 	}
@@ -817,8 +861,24 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 			CheckMenuRadioItem(g_hPopupMenu, ID_CONTEXTMENU_DISABLED, ID_CONTEXTMENU_BEATSTIME,
 				ID_CONTEXTMENU_DISABLED+config_displaymode, MF_BYCOMMAND|MF_CHECKED);
 
+			const bool not_using_time_of_day = (config_displaymode != NXSBCDM_TIMEOFDAY);
 			CheckMenuItem(g_hPopupMenu, ID_CONTEXTMENU_CENTI,
 				MF_BYCOMMAND|(config_centi?MF_CHECKED:MF_UNCHECKED));
+			EnableMenuItem(g_hPopupMenu, ID_CONTEXTMENU_CENTI,
+				!(not_using_time_of_day || (config_timeofdaymode & 1)));
+			
+			CheckMenuItem(g_hPopupMenu, ID_CONTEXTMENU_SHOWSECONDSFORTIMEOFDAY,
+				MF_BYCOMMAND|((config_timeofdaymode & 1)?MF_CHECKED:MF_UNCHECKED));
+			EnableMenuItem(g_hPopupMenu, ID_CONTEXTMENU_SHOWSECONDSFORTIMEOFDAY, not_using_time_of_day);
+			
+			CheckMenuItem(g_hPopupMenu, ID_CONTEXTMENU_SHOWTIMEOFDAYAS24HOURS,
+				MF_BYCOMMAND|((config_timeofdaymode & 2)?MF_CHECKED:MF_UNCHECKED));
+			EnableMenuItem(g_hPopupMenu, ID_CONTEXTMENU_SHOWTIMEOFDAYAS24HOURS, not_using_time_of_day);
+			
+			CheckMenuItem(g_hPopupMenu, ID_CONTEXTMENU_USEADOTASPM,
+				MF_BYCOMMAND|((config_timeofdaymode & 4)?MF_CHECKED:MF_UNCHECKED));
+			EnableMenuItem(g_hPopupMenu, ID_CONTEXTMENU_USEADOTASPM,
+				!(!not_using_time_of_day && !(config_timeofdaymode & 2)));
 
 			CheckMenuItem(g_hPopupMenu, ID_CONTEXTMENU_FREEZE,
 				MF_BYCOMMAND|(config_freeze?MF_CHECKED:MF_UNCHECKED));
@@ -1014,7 +1074,8 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 			}
 			
 			if (config_displaymode != NXSBCDM_DISABLED) {
-				int len = (!szTime[0] ? GetFormattedTime(szTime, ARRAYSIZE(szTime), pos) : wcslen(szTime));
+				int len = (!szTime[0] ? GetFormattedTime(szTime, ARRAYSIZE(szTime), pos,
+						  (config_displaymode == NXSBCDM_TIMEOFDAY)) : wcslen(szTime));
 
 				if (config_shadowtextnew) {
 					// Draw text's "shadow"
