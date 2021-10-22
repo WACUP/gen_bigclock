@@ -62,7 +62,7 @@
 /* global data */
 static const wchar_t szAppName[] = L"NxS BigClock";
 #define PLUGIN_INISECTION szAppName
-#define PLUGIN_VERSION "1.8.1"
+#define PLUGIN_VERSION "1.8.2"
 
 // Menu ID's
 UINT WINAMP_NXS_BIG_CLOCK_MENUID = (ID_GENFF_LIMIT+101);
@@ -686,20 +686,21 @@ int GetFormattedTime(LPWSTR lpszTime, UINT size, int iPos, bool mode) {
 		}
 	}
 	else {
-		const bool show_24hrs = (config_timeofdaymode & 2);
+		const bool show_24hrs = (config_timeofdaymode & 2),
+				   show_dot = (config_timeofdaymode & 4);
 		if (config_timeofdaymode & 1) {
 			const wchar_t szFmtFull[] = L"%d:%.2d:%.2d%s%s\0",
 						  szFmtFullCenti[] = L"%d:%.2d:%.2d.%.2d%s\0";
 			StringCchPrintf(lpszTime, size, (!config_centi ? szFmtFull : szFmtFullCenti),
 							(!show_24hrs && (hours > 12) ? (hours - 12) : hours), minutes, seconds,
 							(config_centi ? dsec : (int)L""), (show_24hrs ? L"" : (hours >= 12 ?
-							((config_timeofdaymode & 4) ? L" ." : L"pm") : L"am")));
+							(show_dot ? L" ." : L"pm") : (show_dot ? L"" : L"am"))));
 		}
 		else {
 			const wchar_t szFmtNoSec[] = L"%d:%.2d%s\0";
 			StringCchPrintf(lpszTime, size, szFmtNoSec, (!show_24hrs && (hours > 12) ?
 							(hours - 12) : hours), minutes, (show_24hrs ? L"" : (hours >= 12 ?
-							((config_timeofdaymode & 4) ? L" ." : L"pm") : L"am")));
+							(show_dot ? L" ." : L"pm") : (show_dot ? L"" : L"am"))));
 		}
 	}
 
