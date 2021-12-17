@@ -114,7 +114,7 @@ BEGIN
             VALUE "FileDescription", "Winamp General Purpose Plug-in"
             VALUE "FileVersion", "1.8.2.0"
             VALUE "InternalName", "gen_bigclock.dll"
-            VALUE "LegalCopyright", "Copyright © 2004-5 Saivert, Updated by Sebastian Pipping (2006), Addtional updates by Darren Owen aka DrO (2016-2021)"
+            VALUE "LegalCopyright", "Copyright © 2004-5 Saivert, Updated by Sebastian Pipping (2006), Addtional updates by Darren Owen aka DrO (2016-2022)"
             VALUE "OriginalFilename", "gen_bigclock.dll"
             VALUE "ProductName", "Big Clock"
             VALUE "ProductVersion", "1.8.2.0"

@@ -997,7 +997,8 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 							pltime = 0;
 
 							if (!CalcThread) {
-								CalcThread = CreateThread(0, 0, (LPTHREAD_START_ROUTINE)CalcLengthThread, (LPVOID)0, CREATE_SUSPENDED, NULL);
+								CalcThread = CreateThread(0, 0, CalcLengthThread,
+														  0, CREATE_SUSPENDED, NULL);
 								if (CalcThread)
 								{
 									SetThreadPriority(CalcThread, THREAD_PRIORITY_LOWEST);
@@ -1026,7 +1027,8 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 							pltime = 0;
 
 							if (!CalcThread) {
-								CalcThread = CreateThread(0, 0, (LPTHREAD_START_ROUTINE)CalcLengthThread, (LPVOID)1, CREATE_SUSPENDED, NULL);
+								CalcThread = CreateThread(0, 0, CalcLengthThread, (LPVOID)
+														  1, CREATE_SUSPENDED, NULL);
 								if (CalcThread)
 								{
 									SetThreadPriority(CalcThread, THREAD_PRIORITY_LOWEST);
