@@ -143,6 +143,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <ProgramDatabaseFile>.\Debug/gen_nxsbigclock.pdb</ProgramDatabaseFile>
       <ImportLibrary>.\Debug/gen_nxsbigclock.lib</ImportLibrary>
+      <ModuleDefinitionFile>gen_bigclock.def</ModuleDefinitionFile>
       <TargetMachine>MachineX86</TargetMachine>
     </Link>
     <PostBuildEvent>
@@ -174,6 +175,7 @@
     <ResourceCompile Include="dialog.rc" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="gen_bigclock.def" />
     <None Include="gen_bigclock.html" />
     <None Include="readme.txt" />
   </ItemGroup>

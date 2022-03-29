@@ -62,7 +62,7 @@
 /* global data */
 static const wchar_t szAppName[] = L"NxS BigClock";
 #define PLUGIN_INISECTION szAppName
-#define PLUGIN_VERSION "1.8.2"
+#define PLUGIN_VERSION "1.9.2"
 
 // Menu ID's
 UINT WINAMP_NXS_BIG_CLOCK_MENUID = (ID_GENFF_LIMIT+101);
@@ -87,7 +87,7 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 static HMENU g_hPopupMenu = 0;
 static LPARAM ipc_bigclockinit = -1;
 static genHotkeysAddStruct genhotkey = {0};
-static UINT hotkey_ipc = (UINT)-1;
+static UINT_PTR hotkey_ipc = (UINT_PTR)-1;
 static ATOM wndclass = 0;
 static HWND hWndBigClock = NULL;
 static embedWindowState embed = {0};
@@ -230,7 +230,7 @@ void SaveDisplayMode(void) {
 	}
 }
 
-bool ProcessMenuResult(UINT command, HWND parent) {
+bool ProcessMenuResult(WPARAM command, HWND parent) {
 	switch (LOWORD(command)) {
 		case ID_CONTEXTMENU_DISABLED:
 		case ID_CONTEXTMENU_ELAPSED:
@@ -310,7 +310,7 @@ bool ProcessMenuResult(UINT command, HWND parent) {
 
 				lf = cf.lpLogFont = (!mode ? &lfDisplay : &lfMode);
 				cf.Flags = CF_SCREENFONTS | CF_INITTOLOGFONTSTRUCT;
-				update = ChooseFont(&cf);
+				update = PickFont(&cf);
 
 				// this will revert the value back if the action
 				// was cancelled otherwise the fonts will shrink
@@ -413,7 +413,7 @@ void config(void) {
 
 	AddItemToMenu2(popup, 0, (LPWSTR)plugin.description, 0, 1);
 	EnableMenuItem(popup, 0, MF_BYCOMMAND | MF_GRAYED | MF_DISABLED);
-	AddItemToMenu2(popup, 0, 0, 1, 1);
+	AddItemToMenu2(popup, (UINT)-1, 0, 1, 1);
 
 	HWND list =	FindWindowEx(GetParent(GetFocus()), 0, L"SysListView32", 0);
 	ListView_GetItemRect(list, ListView_GetSelectionMark(list), &r, LVIR_BOUNDS);
@@ -693,7 +693,7 @@ int GetFormattedTime(LPWSTR lpszTime, UINT size, int iPos, bool mode) {
 						  szFmtFullCenti[] = L"%d:%.2d:%.2d.%.2d%s\0";
 			StringCchPrintf(lpszTime, size, (!config_centi ? szFmtFull : szFmtFullCenti),
 							(!show_24hrs && (hours > 12) ? (hours - 12) : hours), minutes, seconds,
-							(config_centi ? dsec : (int)L""), (show_24hrs ? L"" : (hours >= 12 ?
+							(config_centi ? dsec : (intptr_t)L""), (show_24hrs ? L"" : (hours >= 12 ?
 							(show_dot ? L" ." : L"pm") : (show_dot ? L"" : L"am"))));
 		}
 		else {
@@ -706,11 +706,11 @@ int GetFormattedTime(LPWSTR lpszTime, UINT size, int iPos, bool mode) {
 
 	if (!mode && config_centi) {
 		const wchar_t szMsFmt[] = L".%.2d";
-		int offset = wcslen(lpszTime);
+		size_t offset = wcslen(lpszTime);
 		StringCchPrintf(lpszTime + offset, size - offset, szMsFmt, dsec);
 	}
 
-	return wcslen(lpszTime);
+	return (int)wcslen(lpszTime);
 }
 
 DWORD WINAPI CalcLengthThread(LPVOID lp)
@@ -892,8 +892,8 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 	case WM_USER+0x99:
 		{
 			const int old_dsize = dsize;
-			dsize = wParam;
-			upscaling = lParam;
+			dsize = (int)wParam;
+			upscaling = (int)lParam;
 
 			// TODO need to improve this...
 			if (upscaling)
@@ -1077,8 +1077,8 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 			}
 			
 			if (config_displaymode != NXSBCDM_DISABLED) {
-				int len = (!szTime[0] ? GetFormattedTime(szTime, ARRAYSIZE(szTime), pos,
-						  (config_displaymode == NXSBCDM_TIMEOFDAY)) : wcslen(szTime));
+				int len = (!szTime[0] ? (int)GetFormattedTime(szTime, ARRAYSIZE(szTime), pos,
+						  (config_displaymode == NXSBCDM_TIMEOFDAY)) : (int)wcslen(szTime));
 
 				if (config_shadowtextnew) {
 					// Draw text's "shadow"
@@ -1112,7 +1112,7 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 
 				SIZE s = {0};
 				LPCWSTR lpszDisplayMode = WASABI_API_LNGSTRINGW(dwDisplayMode);
-				int len = wcslen(lpszDisplayMode);
+				const int len = (int)wcslen(lpszDisplayMode);
 				GetTextExtentPoint32(hdc, lpszDisplayMode, len, &s);
 				TextOut(hdc, 0, r.bottom-s.cy, lpszDisplayMode, len);
 

@@ -213,7 +213,7 @@ LRESULT HandleEmbeddedWindowChildMessages(HWND embedWnd, UINT menuId, HWND hwnd,
 	return 0;
 }
 
-void HandleEmbeddedWindowWinampWindowMessages(HWND embedWnd, UINT menuId, embedWindowState* embedWindow,
+void HandleEmbeddedWindowWinampWindowMessages(HWND embedWnd, UINT_PTR menuId, embedWindowState* embedWindow,
 											  HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
 	// these are done before the original window proceedure has been called to
@@ -226,7 +226,7 @@ void HandleEmbeddedWindowWinampWindowMessages(HWND embedWnd, UINT menuId, embedW
 			self_update = TRUE;
 			PostMessage(embedWnd, WM_USER + (!IsWindowVisible(embedWnd) ? 102 : 105), 0, 0);
 			visible = !visible;
-			UpdateEmbeddedWindowsMenu(menuId);
+			UpdateEmbeddedWindowsMenu((UINT)menuId);
 			self_update = FALSE;
 		}
 		else if (LOWORD(wParam) == WINAMP_REFRESHSKIN)
@@ -249,7 +249,7 @@ void HandleEmbeddedWindowWinampWindowMessages(HWND embedWnd, UINT menuId, embedW
 			if (((HWND)wParam == embedWnd) && !self_update)
 			{
 				visible = (lParam == IPC_CB_ONSHOWWND);
-				UpdateEmbeddedWindowsMenu(menuId);
+				UpdateEmbeddedWindowsMenu((UINT)menuId);
 			}
 		}
 		else if ((lParam == IPC_IS_MINIMISED_OR_RESTORED) && !wParam)

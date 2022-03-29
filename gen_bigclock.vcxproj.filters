@@ -13,9 +13,6 @@
       <UniqueIdentifier>{628a4064-7d96-48c1-aebf-2c161fe61098}</UniqueIdentifier>
       <Extensions>ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe</Extensions>
     </Filter>
-    <Filter Include="External Libraries">
-      <UniqueIdentifier>{6337278d-51e1-4b48-9797-c07596450d22}</UniqueIdentifier>
-    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="embedwnd.cpp">
@@ -61,6 +58,9 @@
       <Filter>Resource Files</Filter>
     </None>
     <None Include="readme.txt">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="gen_bigclock.def">
       <Filter>Resource Files</Filter>
     </None>
   </ItemGroup>
