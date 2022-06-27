@@ -94,8 +94,8 @@ END
 //
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 1,9,2,0
- PRODUCTVERSION 1,9,2,0
+ FILEVERSION 1,9,6,0
+ PRODUCTVERSION 1,9,6,0
  FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -112,12 +112,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "WACUP (WinAmp Community Update Project)"
             VALUE "FileDescription", "Winamp General Purpose Plug-in"
-            VALUE "FileVersion", "1.9.2.0"
+            VALUE "FileVersion", "1.9.6.0"
             VALUE "InternalName", "gen_bigclock.dll"
             VALUE "LegalCopyright", "Copyright © 2004-5 Saivert, Updated by Sebastian Pipping (2006), Addtional updates by Darren Owen aka DrO (2016-2022)"
             VALUE "OriginalFilename", "gen_bigclock.dll"
             VALUE "ProductName", "Big Clock"
-            VALUE "ProductVersion", "1.9.2.0"
+            VALUE "ProductVersion", "1.9.6.0"
         END
     END
     BLOCK "VarFileInfo"
@@ -162,6 +162,7 @@ BEGIN
     IDS_RESET_FONTS         "Are you sure you want to reset the fonts back to their default values?"
     IDS_CALCULATING         "Calculating..."
     IDS_BEATS_TIME          ".beats"
+    IDS_NXS_BIG_CLOCK_MENU  "Big Clock\tAlt+B"
 END
 
 STRINGTABLE

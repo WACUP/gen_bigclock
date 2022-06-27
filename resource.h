@@ -15,6 +15,7 @@
 #define IDS_RESET_FONTS                 11
 #define IDS_CALCULATING                 12
 #define IDS_BEATS_TIME                  13
+#define IDS_NXS_BIG_CLOCK_MENU          14
 #define IDR_ACCELERATOR_WND             103
 #define IDB_PLEDIT                      105
 #define IDB_ML                          106

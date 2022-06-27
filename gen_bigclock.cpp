@@ -34,6 +34,8 @@
 
 //#define USE_COMCTL_DRAWSHADOWTEXT
 
+#define PLUGIN_VERSION "1.9.6"
+
 #include <windows.h>
 #include <windowsx.h>
 #include <commctrl.h>
@@ -62,7 +64,6 @@
 /* global data */
 static const wchar_t szAppName[] = L"NxS BigClock";
 #define PLUGIN_INISECTION szAppName
-#define PLUGIN_VERSION "1.9.2"
 
 // Menu ID's
 UINT WINAMP_NXS_BIG_CLOCK_MENUID = (ID_GENFF_LIMIT+101);
@@ -96,7 +97,7 @@ static HPEN hpenVis = NULL;
 static HFONT hfDisplay = NULL, hfMode = NULL;
 static LOGFONT lfDisplay = {0}, lfMode = {0};
 static HANDLE CalcThread;
-static UINT pltime;
+static int64_t pltime;
 static int prevplpos = -1, resetCalc = 0;
 
 // just using these to track the paused and playing states
@@ -113,9 +114,6 @@ DWORD_PTR CALLBACK ConfigDlgProc(HWND,UINT,WPARAM,LPARAM);
 LRESULT CALLBACK GenWndSubclass(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
 								UINT_PTR uIdSubclass, DWORD_PTR dwRefData);
 /* Menu item functions */
-void InsertMenuItemInWinamp(void);
-void RemoveMenuItemFromWinamp(void);
-
 #define NXSBCVM_OSC 1
 #define NXSBCVM_SPEC 2
 
@@ -349,13 +347,13 @@ bool ProcessMenuResult(WPARAM command, HWND parent) {
 
 reparse:
 				wchar_t buf[32] = {0};
-				_itow_s((!mode ? lfDisplay.lfHeight : lfMode.lfHeight), buf, ARRAYSIZE(buf), 10);
+				I2WStr((!mode ? lfDisplay.lfHeight : lfMode.lfHeight), buf, ARRAYSIZE(buf));
 				SaveNativeIniString(WINAMP_INI, PLUGIN_INISECTION, (!mode ? L"df_h" : L"mf_h"), buf);
 
-				_itow_s((!mode ? lfDisplay.lfItalic : lfMode.lfItalic), buf, ARRAYSIZE(buf), 10);
+				I2WStr((!mode ? lfDisplay.lfItalic : lfMode.lfItalic), buf, ARRAYSIZE(buf));
 				SaveNativeIniString(WINAMP_INI, PLUGIN_INISECTION, (!mode ? L"df_i" : L"mf_i"), buf);
 
-				_itow_s((!mode ? lfDisplay.lfWeight : lfMode.lfWeight), buf, ARRAYSIZE(buf), 10);
+				I2WStr((!mode ? lfDisplay.lfWeight : lfMode.lfWeight), buf, ARRAYSIZE(buf));
 				SaveNativeIniString(WINAMP_INI, PLUGIN_INISECTION, (!mode ? L"df_b" : L"mf_b"), buf);
 
 				SaveNativeIniString(WINAMP_INI, PLUGIN_INISECTION, (!mode ? L"df" : L"mf"),
@@ -419,7 +417,8 @@ void config(void) {
 	ListView_GetItemRect(list, ListView_GetSelectionMark(list), &r, LVIR_BOUNDS);
 	ClientToScreen(list, (LPPOINT)&r);
 
-	ProcessMenuResult(TrackPopupMenu(popup, TPM_RETURNCMD | TPM_LEFTBUTTON, r.left, r.top, 0, list, NULL), list);
+	ProcessMenuResult(TrackPopupMenu(popup, TPM_RETURNCMD,
+					  r.left, r.top, 0, list, NULL), list);
 	DestroyMenu(hMenu);
 }
 
@@ -431,26 +430,15 @@ void quit(void) {
 		DestroyEmbeddedWindow(&embed);
 	}
 
-	if (IsWindow(hWndBigClock))
+	// the wacup core will trigger this
+	// to happen so it should all be ok
+	// the main thing is the call above
+	// occurs so window changes do save
+	/*if (IsWindow(hWndBigClock))
 	{
 		DestroyWindow(hWndBigClock);
 		DestroyWindow(g_BigClockWnd); /* delete our window */
-	}
-
-	if (hpenVis) {
-		DeleteObject(hpenVis);
-		hpenVis = NULL;
-	}
-
-	if (hfDisplay) {
-		DeleteObject(hfDisplay);
-		hfDisplay = NULL;
-	}
-
-	if (hfMode) {
-		DeleteObject(hfMode);
-		hfMode = NULL;
-	}
+	/*}*/
 
 	//UnregisterClass(g_BigClockClassName, plugin.hDllInstance);
 }
@@ -525,7 +513,7 @@ void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 
 			// finally we add menu items to the main right-click menu and the views menu
 			// with Modern skins which support showing the views menu for accessing windows
-			AddEmbeddedWindowToMenus(TRUE, WINAMP_NXS_BIG_CLOCK_MENUID, WASABI_API_LNGSTRINGW(IDS_NXS_BIG_CLOCK), -1);
+			AddEmbeddedWindowToMenus(TRUE, WINAMP_NXS_BIG_CLOCK_MENUID, WASABI_API_LNGSTRINGW(IDS_NXS_BIG_CLOCK_MENU), -1);
 
 			// now we will attempt to create an embedded window which adds its own main menu entry
 			// and related keyboard accelerator (like how the media library window is integrated)
@@ -550,6 +538,16 @@ void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 			{
 				g_BigClockWnd = CreateWindowEx(0, (LPCTSTR)wndclass, szAppName, WS_CHILD | WS_VISIBLE,
 					0, 0, 0, 0, hWndBigClock, NULL, plugin.hDllInstance, NULL);
+			}
+
+			// Note: WASABI_API_APP->app_addAccelerators(..) requires Winamp 5.53 and higher
+			//       otherwise if you want to support older clients then you could use the
+			//       IPC_TRANSLATEACCELERATOR callback api which works for v5.0 upto v5.52
+			ACCEL accel = { FVIRTKEY | FALT, 'B', (WORD)WINAMP_NXS_BIG_CLOCK_MENUID };
+			HACCEL hAccel = CreateAcceleratorTable(&accel, 1);
+			if (hAccel)
+			{
+				plugin.app->app_addAccelerators(g_BigClockWnd, &hAccel, 1, TRANSLATE_MODE_GLOBAL);
 			}
 
 			// Winamp can report if it was started minimised which allows us to control our window
@@ -665,11 +663,13 @@ void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 											 &embed, hWnd, uMsg, wParam, lParam);
 }
 
-int GetFormattedTime(LPWSTR lpszTime, UINT size, int iPos, bool mode) {
+int GetFormattedTime(LPWSTR lpszTime, UINT size, int64_t iPos, bool mode) {
 
 	double time_s = (iPos > 0 ? iPos*0.001 : 0);
-	int hours = (int)(time_s / 60 / 60) % 60;
-	time_s -= (hours*60*60);
+	/*int days = (int)(time_s / 86400);
+	time_s -= (days * 60 * 60 * 24);*/
+	int hours = (int)(time_s / 3600) % 60;
+	time_s -= (hours*3600);
 	int minutes = (int)(time_s/60);
 	time_s -= (minutes*60);
 	int seconds = (int)(time_s);
@@ -677,12 +677,19 @@ int GetFormattedTime(LPWSTR lpszTime, UINT size, int iPos, bool mode) {
 	int dsec = (int)(time_s*100);
 
 	if (!mode) {
-		const wchar_t szFmtFull[] = L"%d:%.2d:%.2d\0";
-	if (hours > 0) {
+		/*const wchar_t szFmtFull[] = L"%d:%.2d:%.2d\0";
+		if (days > 0) {
+			StringCchPrintf(lpszTime, size, L"%d %d:%.2d:%.2d\0", days, hours, minutes, seconds);
+		}
+		else if (hours > 0) {
 			StringCchPrintf(lpszTime, size, szFmtFull, hours, minutes, seconds);
 		}
 		else {
 			StringCchPrintf(lpszTime, size, szFmtFull + 3, minutes, seconds);
+		}/*/
+		plugin.language->FormattedTimeString(lpszTime, size, (int)(iPos/1000LL), 0);/**/
+		if (!*lpszTime)	{
+			StringCchCopy(lpszTime, size, L"0:00");
 		}
 	}
 	else {
@@ -716,12 +723,14 @@ int GetFormattedTime(LPWSTR lpszTime, UINT size, int iPos, bool mode) {
 DWORD WINAPI CalcLengthThread(LPVOID lp)
 {
 startCalc:
-	basicFileInfoStructW bfi = {0};
 	if (!lp) {
 		for (int i=0;i<plpos;i++) {
+			basicFileInfoStructW bfi = { 0 };
 			bfi.filename = GetPlaylistItemFile(i);
 			GetBasicFileInfo(&bfi, TRUE);
+			if (bfi.length > -1) {
 			pltime += bfi.length;
+			}
 
 			if (resetCalc) {
 				break;
@@ -730,9 +739,12 @@ startCalc:
 	}
 	else {
 		for (UINT i=plpos;i<pllen;i++) {
+			basicFileInfoStructW bfi = { 0 };
 			bfi.filename = GetPlaylistItemFile(i);
 			GetBasicFileInfo(&bfi, TRUE);
+			if (bfi.length > -1) {
 			pltime += bfi.length;
+			}
 
 			if (resetCalc) {
 				break;
@@ -745,7 +757,7 @@ startCalc:
 		goto startCalc;
 	}
 
-	pltime *= 1000; // s -> ms
+	pltime *= 1000LL; // s -> ms
 
 	if (IsWindow(g_BigClockWnd))
 	{
@@ -792,6 +804,26 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 		// prevent closing the skinned frame from destroying this window
 		return 1;
 	case WM_DESTROY:
+		if (CalcThread) {
+			WaitForSingleObject(CalcThread, INFINITE);
+			CloseHandle(CalcThread);
+			CalcThread = 0;
+		}
+
+		if (hpenVis) {
+			DeleteObject(hpenVis);
+			hpenVis = NULL;
+		}
+
+		if (hfDisplay) {
+			DeleteObject(hfDisplay);
+			hfDisplay = NULL;
+		}
+
+		if (hfMode) {
+			DeleteObject(hfMode);
+			hfMode = NULL;
+		}
 		DestroyMenu(g_hPopupMenu);
 		KillTimer(hWnd, UPDATE_TIMER_ID);
 		break;
@@ -927,7 +959,7 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 			UpdateSkinParts();
 			break;
 		}
-	case WM_USER+0x202:	// WM_DISPLAYCHANGE / IPC_SKIN_CHANGED_NEW / ML_MSG_SKIN_CHANGED
+	case WM_USER+0x202:	// WM_DISPLAYCHANGE / IPC_SKIN_CHANGED_NEW
 		{
 			// make sure we catch all appropriate skin changes
 			UpdateSkinParts();
@@ -943,7 +975,7 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 			RECT r = {0};
 			wchar_t szTime[256] = {0};
 
-			int pos = 0; // The position we display in our big clock
+			int64_t pos = 0; // The position we display in our big clock
 			int dwDisplayMode = 0;
 
 			GetClientRect(hWnd, &r);
@@ -995,6 +1027,7 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 
 							// Get combined duration of all songs up to (but not including) the current song
 							pltime = 0;
+							WASABI_API_LNGSTRINGW_BUF(IDS_CALCULATING, szTime, ARRAYSIZE(szTime));
 
 							if (!CalcThread) {
 								CalcThread = CreateThread(0, 0, CalcLengthThread,
@@ -1008,7 +1041,6 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 							else {
 								resetCalc = 1;
 							}
-							WASABI_API_LNGSTRINGW_BUF(IDS_CALCULATING, szTime, ARRAYSIZE(szTime));
 						}
 
 						// Add elapsed time of current song and store result in pos
@@ -1025,6 +1057,7 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 
 							// Get combined duration of all songs from and including the current song to end of list
 							pltime = 0;
+							WASABI_API_LNGSTRINGW_BUF(IDS_CALCULATING, szTime, ARRAYSIZE(szTime));
 
 							if (!CalcThread) {
 								CalcThread = CreateThread(0, 0, CalcLengthThread, (LPVOID)
@@ -1038,7 +1071,6 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 							else {
 								resetCalc = 1;
 							}
-							WASABI_API_LNGSTRINGW_BUF(IDS_CALCULATING, szTime, ARRAYSIZE(szTime));
 						}
 
 						// Subtract elapsed time of current song and store result in pos
@@ -1163,6 +1195,9 @@ void DrawVisualization(HDC hdc, RECT r)
 	/* Create the pen for the line drawings */
 	HPEN holdpenVis = (HPEN)SelectObject(hdcVis, hpenVis);
 
+	/* Clear background */
+	FillRect(hdcVis, &r, WADlg_getBrush(WADLG_ITEMBG_BRUSH));
+
 	/* Specify, that we want both spectrum and oscilloscope data */
 	if (export_sa_setreq) export_sa_setreq(1); /* Pass 0 (zero) and get spectrum data only */
 
@@ -1171,12 +1206,8 @@ void DrawVisualization(HDC hdc, RECT r)
 	// as it shouldn't be changing & we can use the last
 	// vis data that was received for drawing when paused
 	char *sadata = (export_sa_get && !is_paused ? export_sa_get(data) : data); // Visualization data
-
-	/* Clear background */
-	FillRect(hdcVis, &r, WADlg_getBrush(WADLG_ITEMBG_BRUSH));
-
-	/* Render the oscilloscope */
 	if (sadata) {
+	/* Render the oscilloscope */
 		if ((config_vismode & NXSBCVM_OSC) == NXSBCVM_OSC) {
 			// this is not 'exact' but it'll do for the moment
 			const int interval = (int)ceil(r.right / 75.0f),
@@ -1187,11 +1218,12 @@ void DrawVisualization(HDC hdc, RECT r)
 				LineTo(hdcVis, r.left+(x*interval), (r.top+top) + (sadata[75+x] * scaling));
 			}
 		}
-	}
 
+		/* Render the spectrum */
 	if ((config_vismode & NXSBCVM_SPEC) == NXSBCVM_SPEC) {
 		RECT rVis={0,0,r.right,r.bottom};
 		DrawAnalyzer(hdcVis, rVis, sadata);
+	}
 	}
 
 	SelectObject(hdcVis, holdpenVis);
@@ -1288,39 +1320,6 @@ LRESULT CALLBACK GenWndSubclass(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 		return 0;
 	}
 	return DefSubclass(hwnd, uMsg, wParam, lParam);
-}
-
-void InsertMenuItemInWinamp(void)
-{
-	int i;
-	HMENU WinampMenu;
-	UINT id;
-
-	// get main menu
-	WinampMenu = GetNativeMenu((WPARAM)0);
-
-	// find menu item "main window"
-	for (i=GetMenuItemCount(WinampMenu); i>=0; i--)
-	{
-		if (GetMenuItemID(WinampMenu, i) == 40258)
-		{
-			// find the separator and return if menu item already exists
-			do {
-				id=GetMenuItemID(WinampMenu, ++i);
-				if (id==WINAMP_NXS_BIG_CLOCK_MENUID) return;
-			} while (id != 0xFFFFFFFF);
-
-			// insert menu just before the separator
-			InsertMenu(WinampMenu, i-1, MF_BYPOSITION|MF_STRING, WINAMP_NXS_BIG_CLOCK_MENUID, szAppName);
-			break;
-		}
-	}
-}
-
-void RemoveMenuItemFromWinamp(void)
-{
-	HMENU WinampMenu = GetNativeMenu((WPARAM)0);
-	RemoveMenu(WinampMenu, WINAMP_NXS_BIG_CLOCK_MENUID, MF_BYCOMMAND);
 }
 
 extern "C" __declspec (dllexport) winampGeneralPurposePlugin * winampGetGeneralPurposePlugin(void) {
