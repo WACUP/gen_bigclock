@@ -458,7 +458,7 @@ int init(void) {
 
 		wchar_t pluginTitleW[256] = { 0 };
 		StringCchPrintf(pluginTitleW, ARRAYSIZE(pluginTitleW), WASABI_API_LNGSTRINGW(IDS_PLUGIN_NAME), TEXT(PLUGIN_VERSION));
-		plugin.description = (char*)_wcsdup(pluginTitleW);
+		plugin.description = (char*)plugin.memmgr->sysDupStr(pluginTitleW);
 
 		// wParam must have something provided else it returns 0
 		// and then acts like a IPC_GETVERSION call... not good!
@@ -725,7 +725,7 @@ DWORD WINAPI CalcLengthThread(LPVOID lp)
 startCalc:
 	if (!lp) {
 		for (int i=0;i<plpos;i++) {
-			basicFileInfoStructW bfi = { 0 };
+			basicFileInfoStructW bfi = { 0, 0, -1, NULL, 0 };
 			bfi.filename = GetPlaylistItemFile(i);
 			GetBasicFileInfo(&bfi, TRUE);
 			if (bfi.length > -1) {
@@ -739,7 +739,7 @@ startCalc:
 	}
 	else {
 		for (UINT i=plpos;i<pllen;i++) {
-			basicFileInfoStructW bfi = { 0 };
+			basicFileInfoStructW bfi = { 0, 0, -1, NULL, 0 };
 			bfi.filename = GetPlaylistItemFile(i);
 			GetBasicFileInfo(&bfi, TRUE);
 			if (bfi.length > -1) {
