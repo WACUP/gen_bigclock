@@ -34,7 +34,7 @@
 
 //#define USE_COMCTL_DRAWSHADOWTEXT
 
-#define PLUGIN_VERSION "1.9.6"
+#define PLUGIN_VERSION "1.9.7"
 
 #include <windows.h>
 #include <windowsx.h>
@@ -45,7 +45,6 @@
 #include <math.h>
 
 #include <winamp/gen.h>
-#include <winamp/wa_ipc.h>
 #include <winamp/wa_cup.h>
 #include <winamp/wa_msgids.h>
 #include <gen_ml/ml.h>
@@ -727,8 +726,7 @@ startCalc:
 		for (int i=0;i<plpos;i++) {
 			basicFileInfoStructW bfi = { 0, 0, -1, NULL, 0 };
 			bfi.filename = GetPlaylistItemFile(i);
-			GetBasicFileInfo(&bfi, TRUE);
-			if (bfi.length > -1) {
+			if (GetBasicFileInfo(&bfi, TRUE, TRUE)) {
 			pltime += bfi.length;
 			}
 
@@ -741,8 +739,7 @@ startCalc:
 		for (UINT i=plpos;i<pllen;i++) {
 			basicFileInfoStructW bfi = { 0, 0, -1, NULL, 0 };
 			bfi.filename = GetPlaylistItemFile(i);
-			GetBasicFileInfo(&bfi, TRUE);
-			if (bfi.length > -1) {
+			if (GetBasicFileInfo(&bfi, TRUE, TRUE)) {
 			pltime += bfi.length;
 			}
 
