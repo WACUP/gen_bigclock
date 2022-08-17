@@ -34,7 +34,7 @@
 
 //#define USE_COMCTL_DRAWSHADOWTEXT
 
-#define PLUGIN_VERSION "1.9.7"
+#define PLUGIN_VERSION "1.10"
 
 #include <windows.h>
 #include <windowsx.h>
@@ -109,9 +109,12 @@ void DrawAnalyzer(HDC hdc, RECT r, const char *sadata);
 DWORD WINAPI CalcLengthThread(LPVOID lp);
 DWORD_PTR CALLBACK ConfigDlgProc(HWND,UINT,WPARAM,LPARAM);
 
+#ifdef NATIVE_FREEZE
 /* subclass of skinned frame window (GenWnd) */
 LRESULT CALLBACK GenWndSubclass(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
 								UINT_PTR uIdSubclass, DWORD_PTR dwRefData);
+#endif
+
 /* Menu item functions */
 #define NXSBCVM_OSC 1
 #define NXSBCVM_SPEC 2
@@ -123,7 +126,9 @@ static int config_vismode=TRUE;
 static int config_displaymode=NXSBCDM_ELAPSEDTIME;
 static int config_timeofdaymode=1 | 2;
 static int config_centi=1;
+#ifdef NATIVE_FREEZE
 static int config_freeze=0;
+#endif
 
 /* plugin function prototypes */
 void config(void);
@@ -374,6 +379,7 @@ reparse:
 			}
 			break;
 		}
+#ifdef NATIVE_FREEZE
 		case ID_CONTEXTMENU_FREEZE:
 			config_freeze = !config_freeze;
 			SaveNativeIniString(WINAMP_INI, PLUGIN_INISECTION, L"config_freeze",
@@ -385,6 +391,7 @@ reparse:
 				UnSubclass(hWndBigClock, GenWndSubclass);
 			}
 			break;
+#endif
 		case ID_CONTEXTMENU_ABOUT:
 		{
 			wchar_t message[2048] = {0};
@@ -491,7 +498,9 @@ void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 			GetNativeIniIntParam(WINAMP_INI, PLUGIN_INISECTION, L"config_vismode", &config_vismode);
 			GetNativeIniIntParam(WINAMP_INI, PLUGIN_INISECTION, L"config_displaymode", &config_displaymode);
 			GetNativeIniIntParam(WINAMP_INI, PLUGIN_INISECTION, L"config_centi", &config_centi);
+#ifdef NATIVE_FREEZE
 			GetNativeIniIntParam(WINAMP_INI, PLUGIN_INISECTION, L"config_freeze", &config_freeze);
+#endif
 			GetNativeIniIntParam(WINAMP_INI, PLUGIN_INISECTION, L"config_timeofdaymode", &config_timeofdaymode);
 
 			ReadFontSettings();
@@ -519,10 +528,12 @@ void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 			embed.flags |= EMBED_FLAGS_SCALEABLE_WND;	// double-size support!
 			hWndBigClock = CreateEmbeddedWindow(&embed, embed_guid);
 
+#ifdef NATIVE_FREEZE
 			/* Subclass skinned window frame but only if it's needed for the window freezing*/
 			if (config_freeze) {
 			Subclass(hWndBigClock, GenWndSubclass);
 			}
+#endif
 
 			// once the window is created we can then specify the window title and menu integration
 			SetWindowText(hWndBigClock, WASABI_API_LNGSTRINGW(IDS_NXS_BIG_CLOCK));
@@ -910,8 +921,10 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 			EnableMenuItem(g_hPopupMenu, ID_CONTEXTMENU_USEADOTASPM,
 				!(!not_using_time_of_day && !(config_timeofdaymode & 2)));
 
+#ifdef NATIVE_FREEZE
 			CheckMenuItem(g_hPopupMenu, ID_CONTEXTMENU_FREEZE,
 				MF_BYCOMMAND|(config_freeze?MF_CHECKED:MF_UNCHECKED));
+#endif
 
 			CheckMenuRadioItem(g_hPopupMenu, ID_CONTEXTMENU_DISABLED, ID_CONTEXTMENU_BEATSTIME,
 				ID_CONTEXTMENU_DISABLED+config_displaymode, MF_BYCOMMAND|MF_CHECKED);
@@ -1287,6 +1300,7 @@ void DrawAnalyzer(HDC hdc, RECT r, const char *sadata)
 	}
 }
 
+#ifdef NATIVE_FREEZE
 LRESULT CALLBACK GenWndSubclass(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
 								UINT_PTR uIdSubclass, DWORD_PTR dwRefData)
 {
@@ -1318,6 +1332,7 @@ LRESULT CALLBACK GenWndSubclass(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 	}
 	return DefSubclass(hwnd, uMsg, wParam, lParam);
 }
+#endif
 
 extern "C" __declspec (dllexport) winampGeneralPurposePlugin * winampGetGeneralPurposePlugin(void) {
 	return &plugin;

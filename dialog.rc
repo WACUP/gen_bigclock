@@ -50,7 +50,49 @@ END
 // Menu
 //
 
+#if defined(APSTUDIO_INVOKED) || !defined(NATIVE_FREEZE)
 IDR_CONTEXTMENU MENU
+BEGIN
+    POPUP "contextmenu"
+    BEGIN
+        MENUITEM "&Disabled",                   ID_CONTEXTMENU_DISABLED
+        MENUITEM "&Elapsed",                    ID_CONTEXTMENU_ELAPSED
+        MENUITEM "&Remaining",                  ID_CONTEXTMENU_REMAINING
+        MENUITEM "&Playlist Elapsed",           ID_CONTEXTMENU_PLAYLISTELAPSED
+        MENUITEM "P&laylist Remaining",         ID_CONTEXTMENU_PLAYLISTREMAINING
+        MENUITEM "&Time of day",                ID_CONTEXTMENU_TIMEOFDAY
+        MENUITEM "&.beat time",                 ID_CONTEXTMENU_BEATSTIME
+        MENUITEM SEPARATOR
+        MENUITEM "&Show display mode",          ID_CONTEXTMENU_SHOWDISPLAYMODE
+        MENUITEM "S&hadowed text",              ID_CONTEXTMENU_SHADOWEDTEXT
+        MENUITEM "Show &centiseconds",          ID_CONTEXTMENU_CENTI
+        MENUITEM SEPARATOR
+        MENUITEM "Show seconds for time of day", ID_CONTEXTMENU_SHOWSECONDSFORTIMEOFDAY
+        MENUITEM "Show time of day as 24 hours", ID_CONTEXTMENU_SHOWTIMEOFDAYAS24HOURS
+        MENUITEM "Use a dot as PM indicator",   ID_CONTEXTMENU_USEADOTASPM
+        MENUITEM SEPARATOR
+        MENUITEM "Main text f&ont...",          ID_CONTEXTMENU_MAINTEXTFONT
+        MENUITEM "Display mode fo&nt...",       ID_CONTEXTMENU_DISPLAYMODEFONT
+        MENUITEM "&Reset fonts...",             ID_CONTEXTMENU_RESETFONTS
+        MENUITEM SEPARATOR
+        POPUP "&Visualisations"
+        BEGIN
+            MENUITEM "&None",                       ID_CONTEXTMENU_NONE
+            MENUITEM "&Oscilloscope",               ID_CONTEXTMENU_SHOWOSC
+            MENUITEM "Spectrum &analyser",          ID_CONTEXTMENU_SHOWSPEC
+        END
+        MENUITEM SEPARATOR
+        MENUITEM "&About...",                   ID_CONTEXTMENU_ABOUT
+    END
+END
+#endif
+
+#if defined(APSTUDIO_INVOKED) || defined(NATIVE_FREEZE)
+#if defined(APSTUDIO_INVOKED)
+IDR_CONTEXTMENU$(NATIVE_FREEZE) MENU
+#else
+IDR_CONTEXTMENU MENU
+#endif
 BEGIN
     POPUP "contextmenu"
     BEGIN
@@ -86,6 +128,7 @@ BEGIN
         MENUITEM "&About...",                   ID_CONTEXTMENU_ABOUT
     END
 END
+#endif
 
 
 /////////////////////////////////////////////////////////////////////////////
@@ -94,8 +137,8 @@ END
 //
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 1,9,7,0
- PRODUCTVERSION 1,9,7,0
+ FILEVERSION 1,10,0,0
+ PRODUCTVERSION 1,10,0,0
  FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -110,14 +153,14 @@ BEGIN
     BEGIN
         BLOCK "080004b0"
         BEGIN
-            VALUE "CompanyName", "WACUP (WinAmp Community Update Project)"
-            VALUE "FileDescription", "Winamp General Purpose Plug-in"
-            VALUE "FileVersion", "1.9.7.0"
+            VALUE "CompanyName", "WACUP"
+            VALUE "FileDescription", "General Purpose Plug-in"
+            VALUE "FileVersion", "1.10.0.0"
             VALUE "InternalName", "gen_bigclock.dll"
             VALUE "LegalCopyright", "Copyright © 2004-5 Saivert, Updated by Sebastian Pipping (2006), Addtional updates by Darren Owen aka DrO (2016-2022)"
             VALUE "OriginalFilename", "gen_bigclock.dll"
             VALUE "ProductName", "Big Clock"
-            VALUE "ProductVersion", "1.9.7.0"
+            VALUE "ProductVersion", "1.10.0.0"
         END
     END
     BLOCK "VarFileInfo"
