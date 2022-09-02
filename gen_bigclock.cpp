@@ -342,11 +342,11 @@ bool ProcessMenuResult(WPARAM command, HWND parent) {
 				} else {
 					memset(&lfDisplay, 0, sizeof(lfDisplay));
 					lfDisplay.lfHeight = -50;
-					wcsncpy(lfDisplay.lfFaceName, L"Arial", LF_FACESIZE);
+					StringCchCopy(lfDisplay.lfFaceName, LF_FACESIZE, L"Arial");
 
 					memset(&lfMode, 0, sizeof(lfMode));
 					lfMode.lfHeight = -13;
-					wcsncpy(lfMode.lfFaceName, L"Arial", LF_FACESIZE);
+					StringCchCopy(lfMode.lfFaceName, LF_FACESIZE, L"Arial");
 				}
 
 reparse:
