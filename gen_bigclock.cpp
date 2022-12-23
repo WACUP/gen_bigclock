@@ -34,7 +34,7 @@
 
 //#define USE_COMCTL_DRAWSHADOWTEXT
 
-#define PLUGIN_VERSION "1.10"
+#define PLUGIN_VERSION "1.10.1"
 
 #include <windows.h>
 #include <windowsx.h>
@@ -147,10 +147,7 @@ winampGeneralPurposePlugin plugin =
 	GEN_INIT_WACUP_HAS_MESSAGES
 };
 
-api_language *WASABI_API_LNG = NULL;
-// these two must be declared as they're used by the language api's
-// when the system is comparing/loading the different resources
-HINSTANCE WASABI_API_LNG_HINST = NULL, WASABI_API_ORIG_HINST = NULL;
+SETUP_API_LNG_VARS;
 
 // this is used to identify the skinned frame to allow for embedding/control by modern skins if needed
 // {DF6F9C93-155C-4d01-BF5A-17612EDBFC4C}
@@ -411,20 +408,17 @@ reparse:
 }
 
 void config(void) {
-	HMENU hMenu = WASABI_API_LOADMENUW(IDR_CONTEXTMENU);
-	HMENU popup = GetSubMenu(hMenu, 0);
-	RECT r = {0};
+	HMENU hMenu = WASABI_API_LOADMENUW(IDR_CONTEXTMENU),
+		  popup = GetSubMenu(hMenu, 0);
 
 	AddItemToMenu2(popup, 0, (LPWSTR)plugin.description, 0, 1);
 	EnableMenuItem(popup, 0, MF_BYCOMMAND | MF_GRAYED | MF_DISABLED);
 	AddItemToMenu2(popup, (UINT)-1, 0, 1, 1);
 
-	HWND list =	FindWindowEx(GetParent(GetFocus()), 0, L"SysListView32", 0);
-	ListView_GetItemRect(list, ListView_GetSelectionMark(list), &r, LVIR_BOUNDS);
-	ClientToScreen(list, (LPPOINT)&r);
-
+	POINT pt = { 0 };
+	HWND list = GetPrefsListPos(&pt);
 	ProcessMenuResult(TrackPopupMenu(popup, TPM_RETURNCMD,
-					  r.left, r.top, 0, list, NULL), list);
+					  pt.x, pt.y, 0, list, NULL), list);
 	DestroyMenu(hMenu);
 }
 
@@ -565,7 +559,7 @@ void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 			// is meant to remain hidden until Winamp is restored back into view correctly
 			if (InitialShowState() == SW_SHOWMINIMIZED)
 			{
-				SetEmbeddedWindowMinimizedMode(hWndBigClock, TRUE);
+				SetEmbeddedWindowMinimisedMode(hWndBigClock, TRUE);
 			}
 			/*else
 			{
@@ -861,12 +855,22 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 		{
 			break;
 		}
+	case WM_SYSKEYDOWN:
+	case WM_SYSKEYUP:
+	case WM_SYSCHAR:
 	case WM_KEYDOWN:
 	case WM_KEYUP:
 	case WM_CHAR:
+		{
+			// this is needed to avoid it causing a beep
+			// due to it not being reported as unhandled
+			EatKeyPress();
+		}
 	case WM_MOUSEWHEEL:
+		{
 		PostMessage(plugin.hwndParent, uMsg, wParam, lParam);
 		break;
+		}
 	case WM_CONTEXTMENU:
 		{
 			if ((HWND)wParam!=hWnd) break;
