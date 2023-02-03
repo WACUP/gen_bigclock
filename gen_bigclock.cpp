@@ -34,7 +34,7 @@
 
 //#define USE_COMCTL_DRAWSHADOWTEXT
 
-#define PLUGIN_VERSION "1.10.1"
+#define PLUGIN_VERSION "1.11"
 
 #include <windows.h>
 #include <windowsx.h>
@@ -622,7 +622,10 @@ void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 		// this whole section tests the playback state to determine what is happening
 		else if (lParam == IPC_CB_MISC && wParam == IPC_CB_MISC_STATUS) {
 			const int cur_playing = GetPlayingState();
-			if ((cur_playing == 1) && (GetCurrentTrackPos() > 0)) {
+			// CDs can be funky so it's simpler to just assume that if we're into the
+			// playing state that the CD is loading (e.g. autoplay on start-up) & its
+			// not quite ready with data / playing otherwise we won't then render vis
+			if ((cur_playing == 1) && (GetCurrentTrackPos() > 0) || IsCDEntry(GetPlaylistItemFile(plpos))) {
 				if (is_paused) {
 					is_paused = 0;
 					SetTimer(g_BigClockWnd, UPDATE_TIMER_ID, (!config_vismode &&
