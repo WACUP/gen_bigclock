@@ -294,6 +294,7 @@
 #define ID_PE_SHOWPLAYING               40393
 #define ID_HELP_REGISTERWINAMPPRO       40394
 #define ID_PE_MANUAL_ADVANCE            40395
+#define WINAMP_JUMPTOTRACK              40450
 
 #define ID_SWITCH_COLOURTHEME           44500
 #define ID_GENFF_LIMIT                  45000

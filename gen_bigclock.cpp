@@ -34,7 +34,7 @@
 
 //#define USE_COMCTL_DRAWSHADOWTEXT
 
-#define PLUGIN_VERSION "1.11"
+#define PLUGIN_VERSION "1.12"
 
 #include <windows.h>
 #include <windowsx.h>
@@ -670,7 +670,7 @@ void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 											 &embed, hWnd, uMsg, wParam, lParam);
 }
 
-int GetFormattedTime(LPWSTR lpszTime, UINT size, int64_t iPos, bool mode) {
+int GetFormattedTime(LPWSTR lpszTime, const UINT size, const int64_t iPos, const int mode) {
 
 	double time_s = (iPos > 0 ? iPos*0.001 : 0);
 	/*int days = (int)(time_s / 86400);
@@ -683,7 +683,7 @@ int GetFormattedTime(LPWSTR lpszTime, UINT size, int64_t iPos, bool mode) {
 	time_s -= seconds;
 	int dsec = (int)(time_s*100);
 
-	if (!mode) {
+	if (mode != 1) {
 		/*const wchar_t szFmtFull[] = L"%d:%.2d:%.2d\0";
 		if (days > 0) {
 			StringCchPrintf(lpszTime, size, L"%d %d:%.2d:%.2d\0", days, hours, minutes, seconds);
@@ -694,7 +694,8 @@ int GetFormattedTime(LPWSTR lpszTime, UINT size, int64_t iPos, bool mode) {
 		else {
 			StringCchPrintf(lpszTime, size, szFmtFull + 3, minutes, seconds);
 		}/*/
-		plugin.language->FormattedTimeString(lpszTime, size, (int)(iPos/1000LL), 0);/**/
+		plugin.language->FormattedTimeString(lpszTime, size, (int)(!mode ? (iPos /
+											 1000LL) : ceil(iPos/1000.f)), 0);/**/
 		if (!*lpszTime)	{
 			StringCchCopy(lpszTime, size, L"0:00");
 		}
@@ -1091,6 +1092,9 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 						}
 
 						// Subtract elapsed time of current song and store result in pos
+						// though this will do some rounding as needed to account for it
+						// being 'off' if only whole seconds are being shown compared to
+						// centiseconds so it should match the classic skin main window.
 						pos = (pltime - GetCurrentTrackPos());
 						dwDisplayMode = IDS_PLAYLIST_REMAINING;
 					}
@@ -1127,7 +1131,8 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 			
 			if (config_displaymode != NXSBCDM_DISABLED) {
 				int len = (!szTime[0] ? (int)GetFormattedTime(szTime, ARRAYSIZE(szTime), pos,
-						  (config_displaymode == NXSBCDM_TIMEOFDAY)) : (int)wcslen(szTime));
+						  (config_displaymode == NXSBCDM_TIMEOFDAY) ? 1 : (((config_displaymode ==
+						  NXSBCDM_REMAININGTIME) && !config_centi) ? 2 : 0)) : (int)wcslen(szTime));
 
 				if (config_shadowtextnew) {
 					// Draw text's "shadow"
