@@ -566,7 +566,7 @@ void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 				// only show on startup if under a classic skin and was set
 				if (visible)
 				{
-					PostMessage(hWndBigClock, WM_USER + 102, 0, 0);
+					ShowHideEmbeddedWindow(hWndBigClock, TRUE, FALSE);
 				}
 			}*/
 
@@ -601,7 +601,7 @@ void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 				(InitialShowState() != SW_SHOWMINIMIZED))
 			{
 				// only show on startup if under a classic skin and was set
-				PostMessage(hWndBigClock, WM_USER + 102, 0, 0);
+				ShowHideEmbeddedWindow(hWndBigClock, TRUE, FALSE);
 			}
 		}
 		// this is sent after IPC_PLAYING_FILE on 5.3+ clients
@@ -1227,7 +1227,8 @@ void DrawVisualization(HDC hdc, RECT r)
 	// no need to query for the vis data if we're paused
 	// as it shouldn't be changing & we can use the last
 	// vis data that was received for drawing when paused
-	char *sadata = (export_sa_get && !is_paused ? export_sa_get(data) : data); // Visualization data
+	const char *sadata = (export_sa_get && !is_paused ? // Visualization data
+						  export_sa_get(data) : data);
 	if (sadata) {
 	/* Render the oscilloscope */
 		if ((config_vismode & NXSBCVM_OSC) == NXSBCVM_OSC) {
