@@ -34,7 +34,7 @@
 
 //#define USE_COMCTL_DRAWSHADOWTEXT
 
-#define PLUGIN_VERSION "1.12"
+#define PLUGIN_VERSION "1.13.1"
 
 #include <windows.h>
 #include <windowsx.h>
@@ -515,7 +515,7 @@ void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 
 			// finally we add menu items to the main right-click menu and the views menu
 			// with Modern skins which support showing the views menu for accessing windows
-			AddEmbeddedWindowToMenus(TRUE, WINAMP_NXS_BIG_CLOCK_MENUID, WASABI_API_LNGSTRINGW(IDS_NXS_BIG_CLOCK_MENU), -1);
+			AddEmbeddedWindowToMenus(WINAMP_NXS_BIG_CLOCK_MENUID, WASABI_API_LNGSTRINGW(IDS_NXS_BIG_CLOCK_MENU), visible, -1);
 
 			// now we will attempt to create an embedded window which adds its own main menu entry
 			// and related keyboard accelerator (like how the media library window is integrated)
@@ -559,7 +559,7 @@ void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 			// is meant to remain hidden until Winamp is restored back into view correctly
 			if (InitialShowState() == SW_SHOWMINIMIZED)
 			{
-				SetEmbeddedWindowMinimisedMode(hWndBigClock, TRUE);
+				SetEmbeddedWindowMinimisedMode(hWndBigClock, MINIMISED_FLAG, TRUE);
 			}
 			/*else
 			{
@@ -1009,7 +1009,7 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 			SetBkColor(hdc, WADlg_getColor(WADLG_ITEMBG));
 			SetBkMode(hdc, TRANSPARENT);
 			
-			FillRect(hdc, &r, WADlg_getBrush(WADLG_ITEMBG_BRUSH));
+			FillRectWithColour(hdc, &r, WADlg_getColor(WADLG_ITEMBG));
 
 			HFONT holdfont = (HFONT)SelectObject(hdc, hfDisplay);
 
@@ -1218,7 +1218,7 @@ void DrawVisualization(HDC hdc, RECT r)
 	HPEN holdpenVis = (HPEN)SelectObject(hdcVis, hpenVis);
 
 	/* Clear background */
-	FillRect(hdcVis, &r, WADlg_getBrush(WADLG_ITEMBG_BRUSH));
+	FillRectWithColour(hdcVis, &r, WADlg_getColor(WADLG_ITEMBG));
 
 	/* Specify, that we want both spectrum and oscilloscope data */
 	if (export_sa_setreq) export_sa_setreq(1); /* Pass 0 (zero) and get spectrum data only */
@@ -1309,7 +1309,7 @@ void DrawAnalyzer(HDC hdc, RECT r, const char *sadata)
 		// not doing a 75px wide image upscaled (which really sucks)
 		const RECT peak = {r.left+(x*interval)+1, r.bottom - (safalloff[x] * scaling),
 						   r.left+((x+1)*interval)-1, r.bottom};
-		FillRect(hdc, &peak, WADlg_getBrush(WADLG_ITEMFG_BRUSH));
+		FillRectWithColour(hdc, &peak, WADlg_getColor(WADLG_ITEMFG));
 	}
 }
 
