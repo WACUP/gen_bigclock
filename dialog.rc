@@ -137,8 +137,8 @@ END
 //
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 1,13,1,0
- PRODUCTVERSION 1,13,1,0
+ FILEVERSION 1,13,2,0
+ PRODUCTVERSION 1,13,2,0
  FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -155,12 +155,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "WACUP"
             VALUE "FileDescription", "General Purpose Plug-in"
-            VALUE "FileVersion", "1.13.1.0"
+            VALUE "FileVersion", "1.13.2.0"
             VALUE "InternalName", "gen_bigclock.dll"
             VALUE "LegalCopyright", "Copyright © 2004-5 Saivert, Updated by Sebastian Pipping (2006), Addtional updates by Darren Owen aka DrO (2016-2023)"
             VALUE "OriginalFilename", "gen_bigclock.dll"
             VALUE "ProductName", "Big Clock"
-            VALUE "ProductVersion", "1.13.1.0"
+            VALUE "ProductVersion", "1.13.2.0"
         END
     END
     BLOCK "VarFileInfo"
@@ -202,7 +202,7 @@ BEGIN
     IDS_PLAYLIST_ELAPSED    "Playlist Elapsed"
     IDS_PLAYLIST_REMAINING  "Playlist Remaining"
     IDS_TIME_OF_DAY         "Time of day"
-    IDS_RESET_FONTS         "Are you sure you want to reset the fonts back to their default values?"
+    IDS_RESET_FONTS         "Are you sure you want to reset the\nfonts back to their default values?"
     IDS_CALCULATING         "Calculating..."
     IDS_BEATS_TIME          ".beats"
     IDS_NXS_BIG_CLOCK_MENU  "Big Clock\tAlt+B"

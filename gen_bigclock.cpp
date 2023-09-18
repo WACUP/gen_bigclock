@@ -34,7 +34,7 @@
 
 //#define USE_COMCTL_DRAWSHADOWTEXT
 
-#define PLUGIN_VERSION "1.13.1"
+#define PLUGIN_VERSION "1.13.2"
 
 #include <windows.h>
 #include <windowsx.h>
@@ -283,7 +283,8 @@ bool ProcessMenuResult(WPARAM command, HWND parent) {
 		case ID_CONTEXTMENU_RESETFONTS:
 			{
 				if (MessageBox(parent, WASABI_API_LNGSTRINGW(IDS_RESET_FONTS),
-							   (LPWSTR)plugin.description, MB_YESNO) == IDNO) {
+							   (LPWSTR)plugin.description, MB_YESNO |
+							   MB_ICONQUESTION | MB_DEFBUTTON2) == IDNO) {
 					break;
 				}
 			}
