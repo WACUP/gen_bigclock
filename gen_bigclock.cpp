@@ -34,7 +34,7 @@
 
 //#define USE_COMCTL_DRAWSHADOWTEXT
 
-#define PLUGIN_VERSION "1.13.2"
+#define PLUGIN_VERSION "1.13.3"
 
 #include <windows.h>
 #include <windowsx.h>
@@ -626,7 +626,8 @@ void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 			// CDs can be funky so it's simpler to just assume that if we're into the
 			// playing state that the CD is loading (e.g. autoplay on start-up) & its
 			// not quite ready with data / playing otherwise we won't then render vis
-			if ((cur_playing == 1) && (GetCurrentTrackPos() > 0) || IsCDEntry(GetPlaylistItemFile(plpos))) {
+			if ((cur_playing == 1) && (GetCurrentTrackPos() > 0) ||
+				IsCDEntry(GetPlaylistItemFile(plpos, NULL))) {
 				if (is_paused) {
 					is_paused = 0;
 					SetTimer(g_BigClockWnd, UPDATE_TIMER_ID, (!config_vismode &&
@@ -735,7 +736,7 @@ startCalc:
 	if (!lp) {
 		for (int i=0;i<plpos;i++) {
 			basicFileInfoStructW bfi = { 0, 0, -1, NULL, 0 };
-			bfi.filename = GetPlaylistItemFile(i);
+			bfi.filename = GetPlaylistItemFile(i, NULL);
 			if (GetBasicFileInfo(&bfi, TRUE, TRUE)) {
 			pltime += bfi.length;
 			}
@@ -748,7 +749,7 @@ startCalc:
 	else {
 		for (UINT i=plpos;i<pllen;i++) {
 			basicFileInfoStructW bfi = { 0, 0, -1, NULL, 0 };
-			bfi.filename = GetPlaylistItemFile(i);
+			bfi.filename = GetPlaylistItemFile(i, NULL);
 			if (GetBasicFileInfo(&bfi, TRUE, TRUE)) {
 			pltime += bfi.length;
 			}
