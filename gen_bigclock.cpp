@@ -34,7 +34,7 @@
 
 //#define USE_COMCTL_DRAWSHADOWTEXT
 
-#define PLUGIN_VERSION "1.13.3"
+#define PLUGIN_VERSION "1.13.4"
 
 #include <windows.h>
 #include <windowsx.h>
@@ -453,13 +453,16 @@ int init(void) {
 	{*/
 		/*ServiceBuild(WASABI_API_SVC, WASABI_API_APP, applicationApiServiceGuid);
 		ServiceBuild(WASABI_API_SVC, WASABI_API_LNG, languageApiGUID);/*/
-		WASABI_API_LNG = plugin.language;/**/
+		/*WASABI_API_LNG = plugin.language;/**/
 		// TODO add to lang.h
-		WASABI_API_START_LANG(plugin.hDllInstance, embed_guid);
+		/*WASABI_API_START_LANG(plugin.hDllInstance, embed_guid);
 
 		wchar_t pluginTitleW[256] = { 0 };
 		StringCchPrintf(pluginTitleW, ARRAYSIZE(pluginTitleW), WASABI_API_LNGSTRINGW(IDS_PLUGIN_NAME), TEXT(PLUGIN_VERSION));
-		plugin.description = (char*)plugin.memmgr->sysDupStr(pluginTitleW);
+		plugin.description = (char*)plugin.memmgr->sysDupStr(pluginTitleW);*/
+
+		WASABI_API_START_LANG_DESC(plugin.language, plugin.hDllInstance, embed_guid,
+						IDS_PLUGIN_NAME, TEXT(PLUGIN_VERSION), &plugin.description);
 
 		// wParam must have something provided else it returns 0
 		// and then acts like a IPC_GETVERSION call... not good!
@@ -813,9 +816,11 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 		return 1;
 	case WM_DESTROY:
 		if (CalcThread) {
-			WaitForSingleObject(CalcThread, INFINITE);
+			WaitForSingleObjectEx(CalcThread, INFINITE, TRUE);
+			if (CalcThread) {
 			CloseHandle(CalcThread);
 			CalcThread = 0;
+		}
 		}
 
 		if (hpenVis) {
@@ -1050,13 +1055,7 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 							WASABI_API_LNGSTRINGW_BUF(IDS_CALCULATING, szTime, ARRAYSIZE(szTime));
 
 							if (!CalcThread) {
-								CalcThread = CreateThread(0, 0, CalcLengthThread,
-														  0, CREATE_SUSPENDED, NULL);
-								if (CalcThread)
-								{
-									SetThreadPriority(CalcThread, THREAD_PRIORITY_LOWEST);
-									ResumeThread(CalcThread);
-								}
+								CalcThread = StartThread(CalcLengthThread, 0, THREAD_PRIORITY_LOWEST, 0, NULL);
 							}
 							else {
 								resetCalc = 1;
@@ -1080,13 +1079,7 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 							WASABI_API_LNGSTRINGW_BUF(IDS_CALCULATING, szTime, ARRAYSIZE(szTime));
 
 							if (!CalcThread) {
-								CalcThread = CreateThread(0, 0, CalcLengthThread, (LPVOID)
-														  1, CREATE_SUSPENDED, NULL);
-								if (CalcThread)
-								{
-									SetThreadPriority(CalcThread, THREAD_PRIORITY_LOWEST);
-									ResumeThread(CalcThread);
-								}
+								CalcThread = StartThread(CalcLengthThread, (LPVOID)1, THREAD_PRIORITY_LOWEST, 0, NULL);
 							}
 							else {
 								resetCalc = 1;
@@ -1356,8 +1349,7 @@ extern "C" __declspec (dllexport) winampGeneralPurposePlugin * winampGetGeneralP
 extern "C" __declspec(dllexport) int winampUninstallPlugin(HINSTANCE hDllInst, HWND hwndDlg, int param)
 {
 	// prompt to remove our settings with default as no (just incase)
-	if (MessageBox(hwndDlg, WASABI_API_LNGSTRINGW(IDS_DO_YOU_ALSO_WANT_TO_REMOVE_SETTINGS),
-				   (LPWSTR)plugin.description, MB_YESNO | MB_DEFBUTTON2) == IDYES)
+	if (plugin.language->UninstallSettingsPrompt(reinterpret_cast<const wchar_t*>(plugin.description)))
 	{
 		SaveNativeIniString(WINAMP_INI, PLUGIN_INISECTION, 0, 0);
 		no_uninstall = 0;

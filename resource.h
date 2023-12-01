@@ -3,7 +3,6 @@
 // Used by dialog.rc
 //
 #define IDS_PLUGIN_NAME                 1
-#define IDS_DO_YOU_ALSO_WANT_TO_REMOVE_SETTINGS 2
 #define IDS_ABOUT_STRING                3
 #define IDS_GHK_STRING                  4
 #define IDS_NXS_BIG_CLOCK               5
