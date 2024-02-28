@@ -34,7 +34,7 @@
 
 //#define USE_COMCTL_DRAWSHADOWTEXT
 
-#define PLUGIN_VERSION "1.13.4"
+#define PLUGIN_VERSION "1.13.5"
 
 #include <windows.h>
 #include <windowsx.h>
@@ -199,7 +199,7 @@ void CALLBACK UpdateWnTimerProc(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dw
 
 void SaveDisplayMode(void) {
 	if (config_displaymode != NXSBCDM_ELAPSEDTIME) {
-	SaveNativeIniInt(WINAMP_INI, PLUGIN_INISECTION, L"config_displaymode", config_displaymode);
+		SaveNativeIniInt(WINAMP_INI, PLUGIN_INISECTION, L"config_displaymode", config_displaymode);
 	}
 	else {
 		SaveNativeIniString(WINAMP_INI, PLUGIN_INISECTION, L"config_displaymode", NULL);
@@ -296,7 +296,7 @@ bool ProcessMenuResult(WPARAM command, HWND parent) {
 				mode = (LOWORD(command) == ID_CONTEXTMENU_DISPLAYMODEFONT);
 
 			if (LOWORD(command) != ID_CONTEXTMENU_RESETFONTS) {
-				CHOOSEFONT cf = {0};
+				CHOOSEFONT cf = { 0 };
 				cf.lStructSize = sizeof(cf);
 				cf.hwndOwner = parent;
 
@@ -529,7 +529,7 @@ void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 #ifdef NATIVE_FREEZE
 			/* Subclass skinned window frame but only if it's needed for the window freezing*/
 			if (config_freeze) {
-			Subclass(hWndBigClock, GenWndSubclass);
+				Subclass(hWndBigClock, GenWndSubclass);
 			}
 #endif
 
@@ -541,11 +541,12 @@ void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 			wcex.lpszClassName = g_BigClockClassName;
 			wcex.hInstance = plugin.hDllInstance;
 			wcex.lpfnWndProc = BigClockWndProc;
+			wcex.hCursor = GetArrowCursor(false);
 			wndclass = RegisterClassEx(&wcex);
 			if (wndclass)
 			{
 				g_BigClockWnd = CreateWindowEx(0, (LPCTSTR)wndclass, szAppName, WS_CHILD | WS_VISIBLE,
-					0, 0, 0, 0, hWndBigClock, NULL, plugin.hDllInstance, NULL);
+											   0, 0, 0, 0, hWndBigClock, NULL, plugin.hDllInstance, NULL);
 			}
 
 			// Note: WASABI_API_APP->app_addAccelerators(..) requires Winamp 5.53 and higher
@@ -688,6 +689,7 @@ int GetFormattedTime(LPWSTR lpszTime, const UINT size, const int64_t iPos, const
 	time_s -= seconds;
 	int dsec = (int)(time_s*100);
 
+	size_t remaining = size;
 	if (mode != 1) {
 		/*const wchar_t szFmtFull[] = L"%d:%.2d:%.2d\0";
 		if (days > 0) {
@@ -699,10 +701,10 @@ int GetFormattedTime(LPWSTR lpszTime, const UINT size, const int64_t iPos, const
 		else {
 			StringCchPrintf(lpszTime, size, szFmtFull + 3, minutes, seconds);
 		}/*/
-		plugin.language->FormattedTimeString(lpszTime, size, (int)(!mode ? (iPos /
-											 1000LL) : ceil(iPos/1000.f)), 0);/**/
+		plugin.language->FormattedTimeString(lpszTime, size, (int)(!mode ? (iPos / 1000LL) :
+														 ceil(iPos/1000.f)), 0, &remaining);
 		if (!*lpszTime)	{
-			StringCchCopy(lpszTime, size, L"0:00");
+			StringCchCopyEx(lpszTime, size, L"0:00", NULL, &remaining, NULL);
 		}
 	}
 	else {
@@ -711,26 +713,29 @@ int GetFormattedTime(LPWSTR lpszTime, const UINT size, const int64_t iPos, const
 		if (config_timeofdaymode & 1) {
 			const wchar_t szFmtFull[] = L"%d:%.2d:%.2d%s%s\0",
 						  szFmtFullCenti[] = L"%d:%.2d:%.2d.%.2d%s\0";
-			StringCchPrintf(lpszTime, size, (!config_centi ? szFmtFull : szFmtFullCenti),
-							(!show_24hrs && (hours > 12) ? (hours - 12) : hours), minutes, seconds,
-							(config_centi ? dsec : (intptr_t)L""), (show_24hrs ? L"" : (hours >= 12 ?
-							(show_dot ? L" ." : L"pm") : (show_dot ? L"" : L"am"))));
+			StringCchPrintfEx(lpszTime, size, NULL, &remaining, NULL, (!config_centi ?
+							  szFmtFull : szFmtFullCenti), (!show_24hrs && (hours > 12) ?
+							  (hours - 12) : hours), minutes, seconds, (config_centi ?
+							  dsec : (intptr_t)L""), (show_24hrs ? L"" : ((hours >= 12) ?
+							  (show_dot ? L" ." : L"pm") : (show_dot ? L"" : L"am"))));
 		}
 		else {
 			const wchar_t szFmtNoSec[] = L"%d:%.2d%s\0";
-			StringCchPrintf(lpszTime, size, szFmtNoSec, (!show_24hrs && (hours > 12) ?
-							(hours - 12) : hours), minutes, (show_24hrs ? L"" : (hours >= 12 ?
-							(show_dot ? L" ." : L"pm") : (show_dot ? L"" : L"am"))));
+			StringCchPrintfEx(lpszTime, size, NULL, &remaining, NULL, szFmtNoSec,
+							  (!show_24hrs && (hours > 12) ? (hours - 12) : hours),
+							  minutes, (show_24hrs ? L"" : (hours >= 12 ? (show_dot ?
+										L" ." : L"pm") : (show_dot ? L"" : L"am"))));
 		}
 	}
 
 	if (!mode && config_centi) {
 		const wchar_t szMsFmt[] = L".%.2d";
-		size_t offset = wcslen(lpszTime);
-		StringCchPrintf(lpszTime + offset, size - offset, szMsFmt, dsec);
+		size_t offset = (size - remaining);
+		StringCchPrintfEx((lpszTime + offset), (size - offset),
+						   NULL, &remaining, 0, szMsFmt, dsec);
 	}
 
-	return (int)wcslen(lpszTime);
+	return (int)(size - remaining);
 }
 
 DWORD WINAPI CalcLengthThread(LPVOID lp)
@@ -741,7 +746,7 @@ startCalc:
 			basicFileInfoStructW bfi = { 0, 0, -1, NULL, 0 };
 			bfi.filename = GetPlaylistItemFile(i, NULL);
 			if (GetBasicFileInfo(&bfi, TRUE, TRUE)) {
-			pltime += bfi.length;
+				pltime += bfi.length;
 			}
 
 			if (resetCalc) {
@@ -754,7 +759,7 @@ startCalc:
 			basicFileInfoStructW bfi = { 0, 0, -1, NULL, 0 };
 			bfi.filename = GetPlaylistItemFile(i, NULL);
 			if (GetBasicFileInfo(&bfi, TRUE, TRUE)) {
-			pltime += bfi.length;
+				pltime += bfi.length;
 			}
 
 			if (resetCalc) {
@@ -818,9 +823,9 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 		if (CalcThread) {
 			WaitForSingleObjectEx(CalcThread, INFINITE, TRUE);
 			if (CalcThread) {
-			CloseHandle(CalcThread);
-			CalcThread = 0;
-		}
+				CloseHandle(CalcThread);
+				CalcThread = 0;
+			}
 		}
 
 		if (hpenVis) {
@@ -879,8 +884,8 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 		}
 	case WM_MOUSEWHEEL:
 		{
-		PostMessage(plugin.hwndParent, uMsg, wParam, lParam);
-		break;
+			PostMessage(plugin.hwndParent, uMsg, wParam, lParam);
+			break;
 		}
 	case WM_CONTEXTMENU:
 		{
@@ -1159,11 +1164,12 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 			if (config_showdisplaymode && dwDisplayMode > 0) {
 				holdfont = (HFONT)SelectObject(hdc, hfMode);
 
+				static LPCWSTR lpszDisplayMode = WASABI_API_LNGSTRINGW(dwDisplayMode);
+				static const int lpszDisplayModeLen = (int)wcslen(lpszDisplayMode);
+
 				SIZE s = {0};
-				LPCWSTR lpszDisplayMode = WASABI_API_LNGSTRINGW(dwDisplayMode);
-				const int len = (int)wcslen(lpszDisplayMode);
-				GetTextExtentPoint32(hdc, lpszDisplayMode, len, &s);
-				TextOut(hdc, 0, r.bottom-s.cy, lpszDisplayMode, len);
+				GetTextExtentPoint32(hdc, lpszDisplayMode, lpszDisplayModeLen, &s);
+				TextOut(hdc, 0, r.bottom-s.cy, lpszDisplayMode, lpszDisplayModeLen);
 
 				SelectObject(hdc, holdfont);
 			}
@@ -1225,7 +1231,7 @@ void DrawVisualization(HDC hdc, RECT r)
 	const char *sadata = (export_sa_get && !is_paused ? // Visualization data
 						  export_sa_get(data) : data);
 	if (sadata) {
-	/* Render the oscilloscope */
+		/* Render the oscilloscope */
 		if ((config_vismode & NXSBCVM_OSC) == NXSBCVM_OSC) {
 			// this is not 'exact' but it'll do for the moment
 			const int interval = (int)ceil(r.right / 75.0f),
@@ -1238,10 +1244,10 @@ void DrawVisualization(HDC hdc, RECT r)
 		}
 
 		/* Render the spectrum */
-	if ((config_vismode & NXSBCVM_SPEC) == NXSBCVM_SPEC) {
-		RECT rVis={0,0,r.right,r.bottom};
-		DrawAnalyzer(hdcVis, rVis, sadata);
-	}
+		if ((config_vismode & NXSBCVM_SPEC) == NXSBCVM_SPEC) {
+			RECT rVis = { 0,0,r.right,r.bottom };
+			DrawAnalyzer(hdcVis, rVis, sadata);
+		}
 	}
 
 	SelectObject(hdcVis, holdpenVis);
