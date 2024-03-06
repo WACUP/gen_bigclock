@@ -34,7 +34,7 @@
 
 //#define USE_COMCTL_DRAWSHADOWTEXT
 
-#define PLUGIN_VERSION "1.13.5"
+#define PLUGIN_VERSION "1.14"
 
 #include <windows.h>
 #include <windowsx.h>
@@ -104,7 +104,6 @@ int is_paused = 0, is_playing = 0, plpos = 0, itemlen = 0;
 UINT pllen = 0;
 
 void DrawVisualization(HDC hdc, RECT r);
-void DrawAnalyzer(HDC hdc, RECT r, const char *sadata);
 
 DWORD WINAPI CalcLengthThread(LPVOID lp);
 DWORD_PTR CALLBACK ConfigDlgProc(HWND,UINT,WPARAM,LPARAM);
@@ -1237,16 +1236,70 @@ void DrawVisualization(HDC hdc, RECT r)
 			const int interval = (int)ceil(r.right / 75.0f),
 					  top = ((r.bottom) / 2),
 					  scaling = (int)ceil((top + 40) / 40.0f);
-			MoveToEx(hdcVis, r.left-1, r.top + top, NULL);
-			for (int x = 0; x < 75; x++) {
-				LineTo(hdcVis, r.left+(x*interval), (r.top+top) + (sadata[75+x] * scaling));
+
+			// start at the correct initial position so there isn't
+			// a partial line drawn from the centre line up to that
+			// which can look wrong if looking too closely at it...
+			MoveToEx(hdcVis, r.left, (r.top + top) + (sadata[75] * scaling), NULL);
+			for (int x = 1; x < 75; x++) {
+				LineTo(hdcVis, r.left + (x * interval), (r.top + top) + (sadata[75 + x] * scaling));
 			}
 		}
 
 		/* Render the spectrum */
 		if ((config_vismode & NXSBCVM_SPEC) == NXSBCVM_SPEC) {
 			RECT rVis = { 0,0,r.right,r.bottom };
-			DrawAnalyzer(hdcVis, rVis, sadata);
+			static char sapeaks[150];
+			static char safalloff[150];
+			static char sapeaksdec[150];
+
+			// this is not 'exact' but it'll do for the moment
+			const int interval = (int)ceil(rVis.right / 75.0f),
+					  scaling = (int)ceil((rVis.bottom - 40) / 40.0f);
+			for (int x = 0; x < 75; x++)
+			{
+				if (!is_paused)
+				{
+					/* Fix peaks & falloff */
+					if (sadata[x] > sapeaks[x]) {
+						sapeaks[x] = sadata[x];
+						sapeaksdec[x] = 0;
+					}
+					else {
+						sapeaks[x] = sapeaks[x] - 1;
+
+						if (sapeaksdec[x] >= 8) {
+							sapeaks[x] = (char)(int)(sapeaks[x] - 0.3 * (sapeaksdec[x] - 8));
+						}
+						if (sapeaks[x] < 0) {
+							sapeaks[x] = 0;
+						}
+						else {
+							sapeaksdec[x] = sapeaksdec[x] + 1;
+						}
+					}
+
+					if (sadata[x] > safalloff[x]) {
+						safalloff[x] = sadata[x];
+					}
+					else {
+						safalloff[x] = safalloff[x] - 2;
+					}
+
+					/*MoveToEx(hdc, rVis.left+(x*interval), rVis.bottom, NULL);
+					LineTo(hdc, rVis.left+(x*interval), rVis.bottom - safalloff[x]);
+
+					// Draw peaks
+					MoveToEx(hdc, rVis.left+(x*interval), rVis.bottom - safalloff[x], NULL);
+					LineTo(hdc, rVis.left+(x*interval), rVis.bottom - safalloff[x]);*/
+				}
+
+				// Draw peaks as bars to better fill the window space whilst
+				// not doing a 75px wide image upscaled (which really sucks)
+				const RECT peak = {rVis.left+(x*interval)+1, rVis.bottom - (safalloff[x] * scaling),
+								   rVis.left+((x+1)*interval)-1, rVis.bottom};
+				FillRectWithColour(hdcVis, &peak, WADlg_getColor(WADLG_ITEMFG));
+			}
 		}
 	}
 
@@ -1260,58 +1313,6 @@ void DrawVisualization(HDC hdc, RECT r)
 	SelectObject(hdcVis, holdbmVis);
 	DeleteObject(hbmVis);
 	DeleteDC(hdcVis);
-}
-
-void DrawAnalyzer(HDC hdc, RECT r, const char *sadata)
-{
-	static char sapeaks[150];
-	static char safalloff[150];
-	static char sapeaksdec[150];
-
-	// this is not 'exact' but it'll do for the moment
-	const int interval = (int)ceil(r.right / 75.0f),
-			  scaling = (int)ceil((r.bottom - 40) / 40.0f);
-	for (int x = 0; x < 75; x++)
-	{
-		/* Fix peaks & falloff */
-		if (sadata[x] > sapeaks[x]) {
-			sapeaks[x] = sadata[x];
-			sapeaksdec[x] = 0;
-		}
-		else {
-			sapeaks[x] = sapeaks[x] - 1;
-
-			if (sapeaksdec[x] >= 8) {
-				sapeaks[x] = (char)(int)(sapeaks[x] - 0.3 * (sapeaksdec[x] - 8));
-			}
-			if (sapeaks[x] < 0) {
-				sapeaks[x] = 0;
-			}
-			else {
-				sapeaksdec[x] = sapeaksdec[x] + 1;
-			}
-		}
-
-		if (sadata[x] > safalloff[x]) {
-			safalloff[x] = sadata[x];
-		}
-		else {
-			safalloff[x] = safalloff[x] - 2;
-		}
-
-		/*MoveToEx(hdc, r.left+(x*interval), r.bottom, NULL);
-		LineTo(hdc, r.left+(x*interval), r.bottom - safalloff[x]);
-
-		// Draw peaks
-		MoveToEx(hdc, r.left+(x*interval), r.bottom - safalloff[x], NULL);
-		LineTo(hdc, r.left+(x*interval), r.bottom - safalloff[x]);*/
-
-		// Draw peaks as bars to better fill the window space whilst
-		// not doing a 75px wide image upscaled (which really sucks)
-		const RECT peak = {r.left+(x*interval)+1, r.bottom - (safalloff[x] * scaling),
-						   r.left+((x+1)*interval)-1, r.bottom};
-		FillRectWithColour(hdc, &peak, WADlg_getColor(WADLG_ITEMFG));
-	}
 }
 
 #ifdef NATIVE_FREEZE

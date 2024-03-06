@@ -137,8 +137,8 @@ END
 //
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 1,13,5,0
- PRODUCTVERSION 1,13,5,0
+ FILEVERSION 1,14,0,0
+ PRODUCTVERSION 1,14,0,0
  FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -155,12 +155,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "WACUP"
             VALUE "FileDescription", "General Purpose Plug-in"
-            VALUE "FileVersion", "1.13.5.0"
+            VALUE "FileVersion", "1.14.0.0"
             VALUE "InternalName", "gen_bigclock.dll"
             VALUE "LegalCopyright", "Copyright © 2004-5 Saivert, Updated by Sebastian Pipping (2006), Addtional updates by Darren Owen aka DrO (2016-2024)"
             VALUE "OriginalFilename", "gen_bigclock.dll"
             VALUE "ProductName", "Big Clock"
-            VALUE "ProductVersion", "1.13.5.0"
+            VALUE "ProductVersion", "1.14.0.0"
         END
     END
     BLOCK "VarFileInfo"
