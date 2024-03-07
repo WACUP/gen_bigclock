@@ -34,7 +34,7 @@
 
 //#define USE_COMCTL_DRAWSHADOWTEXT
 
-#define PLUGIN_VERSION "1.14.1"
+#define PLUGIN_VERSION "1.15"
 
 #include <windows.h>
 #include <windowsx.h>
@@ -77,7 +77,7 @@ UINT WINAMP_NXS_BIG_CLOCK_MENUID = (ID_GENFF_LIMIT+101);
 #define NXSBCDM_MAX 6
 
 #define UPDATE_TIMER_ID 1
-#define UPDATE_TIMER 32
+#define UPDATE_TIMER 33
 
 /* BigClock window */
 static HWND g_BigClockWnd;
@@ -99,6 +99,12 @@ static int prevplpos = -1, resetCalc = 0;
 // just using these to track the paused and playing states
 int is_paused = 0, is_playing = 0, plpos = 0, itemlen = 0;
 UINT pllen = 0;
+
+COLORREF clrBackground = RGB(0, 0, 0),
+		 clrTimerText = RGB(0, 255, 0),
+		 clrVisOsc = RGB(0, 255, 0),
+		 clrVisSA = RGB(0, 255, 0),
+		 clrTimerTextShadow = 0x00808080;
 
 void DrawVisualization(HDC hdc, RECT r);
 
@@ -151,10 +157,47 @@ static const GUID embed_guid =
 { 0xdf6f9c93, 0x155c, 0x4d01, { 0xbf, 0x5a, 0x17, 0x61, 0x2e, 0xdb, 0xfc, 0x4c } };
 
 void UpdateSkinParts(void) {
+
+	clrBackground = WADlg_getColor(WADLG_ITEMBG);
+	clrTimerText = clrVisOsc = clrVisSA = WADlg_getColor(WADLG_ITEMFG);
+	clrTimerTextShadow = 0x00808080;
+
+	// get the current skin and use that as a
+	// means to control the colouring used
+	wchar_t szBuffer[MAX_PATH] = { 0 };
+	GetCurrentSkin(szBuffer, ARRAYSIZE(szBuffer));
+
+	// attempt to now use the skin override options
+	// which are provided in a waveseek.txt within
+	// the root of the skin (folder or archive).
+	if (szBuffer[0])
+	{
+		// look for the file that classic skins could provide
+		AppendOnPath(szBuffer, L"bigclock.txt");
+		if (FileExists(szBuffer)) {
+			clrBackground = GetPrivateProfileHex(L"colours", L"background", clrBackground, szBuffer);
+			clrTimerText = GetPrivateProfileHex(L"colours", L"timertext", clrTimerText, szBuffer);
+			clrTimerTextShadow = GetPrivateProfileHex(L"colours", L"timertextshadow", clrTimerTextShadow, szBuffer);
+			clrVisOsc = GetPrivateProfileHex(L"colours", L"visosc", clrVisOsc, szBuffer);
+			clrVisSA = GetPrivateProfileHex(L"colours", L"vissa", clrVisSA, szBuffer);
+		}
+#ifndef _WIN64
+		else {
+			// otherwise look for (if loaded) anything within the
+			// modern skin configuration for it's override colours
+			clrBackground = GetFFSkinColour(L"plugin.bigclock.background", clrBackground);
+			clrTimerText = GetFFSkinColour(L"plugin.bigclock.timertext", clrTimerText);
+			clrTimerTextShadow = GetFFSkinColour(L"plugin.bigclock.timertextshadow", clrTimerTextShadow);
+			clrVisOsc = GetFFSkinColour(L"plugin.bigclock.visosc", clrVisOsc);
+			clrVisSA = GetFFSkinColour(L"plugin.bigclock.vissa", clrVisSA);
+		}
+#endif
+	}
+
 	if (hpenVis) {
 		DeleteObject(hpenVis);
 	}
-	hpenVis = CreatePen(PS_SOLID, (!dsize ? 1 : 2)/*(!dsize ? 2 : 4)*/, WADlg_getColor(WADLG_ITEMFG));
+	hpenVis = CreatePen(PS_SOLID, (!dsize ? 1 : 2)/*(!dsize ? 2 : 4)*/, clrVisOsc);
 
 	if (hfDisplay) {
 		DeleteObject(hfDisplay);
@@ -566,6 +609,7 @@ void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 			const int playing = GetPlayingState();
 			is_paused = (playing == 3);
 			is_playing = (playing == 1 || is_paused);
+
 			pllen = GetPlaylistLength();
 			plpos = GetPlaylistPosition();
 			itemlen = GetCurrentTrackLengthMilliSeconds();
@@ -648,6 +692,14 @@ void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 				plpos = GetPlaylistPosition();
 				itemlen = GetCurrentTrackLengthMilliSeconds();
 				InvalidateRect(g_BigClockWnd, NULL, FALSE);
+			}
+			else
+			{
+				// if we've gotten here then probably it's whilst
+				// things are loading & trying to resume playback
+				// which without this may prevent the vis running
+				is_paused = (cur_playing == 3);
+				is_playing = (cur_playing == 1 || is_paused);
 			}
 		}
 	}
@@ -1001,10 +1053,10 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 			HBITMAP holdbm = (HBITMAP)SelectObject(hdc, hbm);
 
 			// Paint the background
-			SetBkColor(hdc, WADlg_getColor(WADLG_ITEMBG));
+			SetBkColor(hdc, clrBackground);
 			SetBkMode(hdc, TRANSPARENT);
 			
-			FillRectWithColour(hdc, &r, WADlg_getColor(WADLG_ITEMBG));
+			FillRectWithColour(hdc, &r, clrBackground);
 
 			HFONT holdfont = (HFONT)SelectObject(hdc, hfDisplay);
 
@@ -1121,7 +1173,7 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 					// Draw text's "shadow"
 					r.left += 5;
 					r.top += 5;
-					SetTextColor(hdc, 0x00808080);
+					SetTextColor(hdc, clrTimerTextShadow);
 					DrawText(hdc, szTime, len, &r, DT_CENTER|DT_VCENTER|DT_SINGLELINE);
 
 					// Draw text
@@ -1129,11 +1181,11 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 					r.top -= 5;
 				}
 
-				SetTextColor(hdc, WADlg_getColor(WADLG_ITEMFG));
+				SetTextColor(hdc, clrTimerText);
 				DrawText(hdc, szTime, len, &r, DT_CENTER|DT_VCENTER|DT_SINGLELINE);
 			}
 			else {
-				SetTextColor(hdc, WADlg_getColor(WADLG_ITEMFG));
+				SetTextColor(hdc, clrTimerText);
 			}
 
 			SelectObject(hdc, holdfont);
@@ -1202,7 +1254,7 @@ void DrawVisualization(HDC hdc, RECT r)
 	HPEN holdpenVis = (HPEN)SelectObject(hdcVis, hpenVis);
 
 	/* Clear background */
-	FillRectWithColour(hdcVis, &r, WADlg_getColor(WADLG_ITEMBG));
+	FillRectWithColour(hdcVis, &r, clrBackground);
 
 	/* Specify, that we want both spectrum and oscilloscope data */
 	if (export_sa_setreq) export_sa_setreq(1); /* Pass 0 (zero) and get spectrum data only */
@@ -1282,7 +1334,7 @@ void DrawVisualization(HDC hdc, RECT r)
 				// not doing a 75px wide image upscaled (which really sucks)
 				const RECT peak = {rVis.left+(x*interval)+1, rVis.bottom - (safalloff[x] * scaling),
 								   rVis.left+((x+1)*interval)-1, rVis.bottom};
-				FillRectWithColour(hdcVis, &peak, WADlg_getColor(WADLG_ITEMFG));
+				FillRectWithColour(hdcVis, &peak, clrVisSA);
 			}
 		}
 	}
