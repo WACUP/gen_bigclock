@@ -34,7 +34,7 @@
 
 //#define USE_COMCTL_DRAWSHADOWTEXT
 
-#define PLUGIN_VERSION "1.14"
+#define PLUGIN_VERSION "1.14.1"
 
 #include <windows.h>
 #include <windowsx.h>
@@ -50,7 +50,6 @@
 #include <gen_ml/ml.h>
 #include <gen_ml/ml_ipc_0313.h>
 #include <nu/servicebuilder.h>
-#include <winamp/wa_hotkeys.h>
 #define WA_DLG_IMPORTS
 #include <winamp/wa_dlg.h>
 #include "embedwnd.h"
@@ -86,8 +85,6 @@ static wchar_t g_BigClockClassName[] = L"NxSBigClockWnd";
 LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 static HMENU g_hPopupMenu = 0;
 static LPARAM ipc_bigclockinit = -1;
-static genHotkeysAddStruct genhotkey = {0};
-static UINT_PTR hotkey_ipc = (UINT_PTR)-1;
 static ATOM wndclass = 0;
 static HWND hWndBigClock = NULL;
 static embedWindowState embed = {0};
@@ -473,16 +470,6 @@ int init(void) {
 	return GEN_INIT_FAILURE;*/
 }
 
-LRESULT HotkeyCallback(HWND hWnd, const UINT uMsg, const
-					   WPARAM wParam, const LPARAM lParam)
-{
-	if (uMsg == (UINT)hotkey_ipc)
-	{
-		PostMessage(hWnd, WM_COMMAND, WINAMP_NXS_BIG_CLOCK_MENUID, 0);
-	}
-	return 0;
-}
-
 void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 						 WPARAM wParam, const LPARAM lParam)
 {
@@ -573,9 +560,6 @@ void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 					ShowHideEmbeddedWindow(hWndBigClock, TRUE, FALSE);
 				}
 			}*/
-
-			AddGlobalHotkey(&genhotkey, WASABI_API_LNGSTRINGW_DUP(IDS_GHK_STRING),
-							"NxSBigClockToggle", &hotkey_ipc, 0, 0, HotkeyCallback);
 
 			// ensure we've got current states as due to how the load
 			// can happen, it's possible to not catch the play event.
