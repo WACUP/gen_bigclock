@@ -34,7 +34,7 @@
 
 //#define USE_COMCTL_DRAWSHADOWTEXT
 
-#define PLUGIN_VERSION "1.15"
+#define PLUGIN_VERSION "1.15.1"
 
 #include <windows.h>
 #include <windowsx.h>
@@ -1056,7 +1056,7 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 			SetBkColor(hdc, clrBackground);
 			SetBkMode(hdc, TRANSPARENT);
 			
-			FillRectWithColour(hdc, &r, clrBackground);
+			FillRectWithColour(hdc, &r, clrBackground, FALSE);
 
 			HFONT holdfont = (HFONT)SelectObject(hdc, hfDisplay);
 
@@ -1199,8 +1199,23 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 			if (config_showdisplaymode && dwDisplayMode > 0) {
 				holdfont = (HFONT)SelectObject(hdc, hfMode);
 
-				static LPCWSTR lpszDisplayMode = WASABI_API_LNGSTRINGW(dwDisplayMode);
-				static const int lpszDisplayModeLen = (int)wcslen(lpszDisplayMode);
+				static int dwLastDisplayMode = -1;
+				static LPWSTR lpszDisplayMode;
+				static int lpszDisplayModeLen;
+
+				// so we don't have to keep getting the string we'll
+				// try to cache it to reduce the time to draw things
+				if (dwLastDisplayMode != dwDisplayMode)
+				{
+					if (lpszDisplayMode)
+					{
+						plugin.memmgr->sysFree(lpszDisplayMode);
+					}
+					lpszDisplayMode = WASABI_API_LNGSTRINGW_DUP(dwDisplayMode);
+					lpszDisplayModeLen = (int)wcslen(lpszDisplayMode);
+
+					dwLastDisplayMode = dwDisplayMode;
+				}
 
 				SIZE s = {0};
 				GetTextExtentPoint32(hdc, lpszDisplayMode, lpszDisplayModeLen, &s);
@@ -1254,7 +1269,7 @@ void DrawVisualization(HDC hdc, RECT r)
 	HPEN holdpenVis = (HPEN)SelectObject(hdcVis, hpenVis);
 
 	/* Clear background */
-	FillRectWithColour(hdcVis, &r, clrBackground);
+	FillRectWithColour(hdcVis, &r, clrBackground, FALSE);
 
 	/* Specify, that we want both spectrum and oscilloscope data */
 	if (export_sa_setreq) export_sa_setreq(1); /* Pass 0 (zero) and get spectrum data only */
@@ -1334,7 +1349,7 @@ void DrawVisualization(HDC hdc, RECT r)
 				// not doing a 75px wide image upscaled (which really sucks)
 				const RECT peak = {rVis.left+(x*interval)+1, rVis.bottom - (safalloff[x] * scaling),
 								   rVis.left+((x+1)*interval)-1, rVis.bottom};
-				FillRectWithColour(hdcVis, &peak, clrVisSA);
+				FillRectWithColour(hdcVis, &peak, clrVisSA, FALSE);
 			}
 		}
 	}
