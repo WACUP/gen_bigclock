@@ -1250,15 +1250,15 @@ void DrawVisualization(HDC hdc, RECT r)
 {
 	BLENDFUNCTION bf={0,0,80,0};
 
-	static char* (*export_sa_get)(char data[75*2 + 8]);
-	static void (*export_sa_setreq)(int);
+	static char* (__cdecl *export_sa_get)(char data[75*2 + 8]);
+	static void (__cdecl *export_sa_setreq)(int);
 
 	/* Get function pointers from Winamp */
 	if (!export_sa_get) {
-		export_sa_get = (char* (*)(char data[75*2 + 8]))GetSADataFunc(2);
+		export_sa_get = (char* (__cdecl *)(char data[75*2 + 8]))GetSADataFunc(2);
 	}
 	if (!export_sa_setreq) {
-		export_sa_setreq = (void (*)(int))GetSADataFunc(1);
+		export_sa_setreq = (void (__cdecl *)(int))GetSADataFunc(1);
 	}
 
 	HDC hdcVis = CreateCompatibleDC(NULL);
