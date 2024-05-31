@@ -34,7 +34,7 @@
 
 //#define USE_COMCTL_DRAWSHADOWTEXT
 
-#define PLUGIN_VERSION "1.15.1"
+#define PLUGIN_VERSION "1.15.2"
 
 #include <windows.h>
 #include <windowsx.h>
@@ -185,11 +185,11 @@ void UpdateSkinParts(void) {
 		else {
 			// otherwise look for (if loaded) anything within the
 			// modern skin configuration for it's override colours
-			clrBackground = GetFFSkinColour(L"plugin.bigclock.background", clrBackground);
-			clrTimerText = GetFFSkinColour(L"plugin.bigclock.timertext", clrTimerText);
-			clrTimerTextShadow = GetFFSkinColour(L"plugin.bigclock.timertextshadow", clrTimerTextShadow);
-			clrVisOsc = GetFFSkinColour(L"plugin.bigclock.visosc", clrVisOsc);
-			clrVisSA = GetFFSkinColour(L"plugin.bigclock.vissa", clrVisSA);
+			clrBackground = GetFFSkinColour(L"plugin.bigclock.background", clrBackground, true);
+			clrTimerText = GetFFSkinColour(L"plugin.bigclock.timertext", clrTimerText, false);
+			clrTimerTextShadow = GetFFSkinColour(L"plugin.bigclock.timertextshadow", clrTimerTextShadow, false);
+			clrVisOsc = GetFFSkinColour(L"plugin.bigclock.visosc", clrVisOsc, false);
+			clrVisSA = GetFFSkinColour(L"plugin.bigclock.vissa", clrVisSA, false);
 		}
 #endif
 	}
