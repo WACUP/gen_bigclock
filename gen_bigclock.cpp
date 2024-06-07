@@ -34,7 +34,7 @@
 
 //#define USE_COMCTL_DRAWSHADOWTEXT
 
-#define PLUGIN_VERSION "1.15.2"
+#define PLUGIN_VERSION "1.15.3"
 
 #include <windows.h>
 #include <windowsx.h>
@@ -548,7 +548,9 @@ void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 
 			// finally we add menu items to the main right-click menu and the views menu
 			// with Modern skins which support showing the views menu for accessing windows
-			AddEmbeddedWindowToMenus(WINAMP_NXS_BIG_CLOCK_MENUID, WASABI_API_LNGSTRINGW(IDS_NXS_BIG_CLOCK_MENU), visible, -1);
+			wchar_t lang_string[32] = { 0 };
+			AddEmbeddedWindowToMenus(WINAMP_NXS_BIG_CLOCK_MENUID, WASABI_API_LNGSTRINGW_BUF(IDS_NXS_BIG_CLOCK_MENU,
+																lang_string, ARRAYSIZE(lang_string)), visible, -1);
 
 			// now we will attempt to create an embedded window which adds its own main menu entry
 			// and related keyboard accelerator (like how the media library window is integrated)
@@ -563,7 +565,8 @@ void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 #endif
 
 			// once the window is created we can then specify the window title and menu integration
-			SetWindowText(hWndBigClock, WASABI_API_LNGSTRINGW(IDS_NXS_BIG_CLOCK));
+			SetWindowText(hWndBigClock, WASABI_API_LNGSTRINGW_BUF(IDS_NXS_BIG_CLOCK,
+											  lang_string, ARRAYSIZE(lang_string)));
 
 			WNDCLASSEX wcex = { 0 };
 			wcex.cbSize = sizeof(WNDCLASSEX);
@@ -780,7 +783,7 @@ startCalc:
 		for (int i=0;i<plpos;i++) {
 			basicFileInfoStructW bfi = { 0, 0, -1, NULL, 0 };
 			bfi.filename = GetPlaylistItemFile(i, NULL);
-			if (GetBasicFileInfo(&bfi, TRUE, TRUE)) {
+			if (bfi.filename && GetBasicFileInfo(&bfi, TRUE, TRUE)) {
 				pltime += bfi.length;
 			}
 
@@ -793,7 +796,7 @@ startCalc:
 		for (UINT i=plpos;i<pllen;i++) {
 			basicFileInfoStructW bfi = { 0, 0, -1, NULL, 0 };
 			bfi.filename = GetPlaylistItemFile(i, NULL);
-			if (GetBasicFileInfo(&bfi, TRUE, TRUE)) {
+			if (bfi.filename && GetBasicFileInfo(&bfi, TRUE, TRUE)) {
 				pltime += bfi.length;
 			}
 
