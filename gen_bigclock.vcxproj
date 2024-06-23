@@ -175,6 +175,7 @@
     <ResourceCompile Include="dialog.rc" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="about.txt.gz" />
     <None Include="gen_bigclock.def" />
     <None Include="gen_bigclock.html" />
     <None Include="readme.txt" />

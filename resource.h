@@ -3,17 +3,17 @@
 // Used by dialog.rc
 //
 #define IDS_PLUGIN_NAME                 1
+#define IDS_NXS_BIG_CLOCK               2
 #define IDS_ABOUT_STRING                3
-#define IDS_NXS_BIG_CLOCK               5
-#define IDS_ELAPSED                     6
-#define IDS_REMAINING                   7
-#define IDS_PLAYLIST_ELAPSED            8
-#define IDS_PLAYLIST_REMAINING          9
-#define IDS_TIME_OF_DAY                 10
-#define IDS_RESET_FONTS                 11
-#define IDS_CALCULATING                 12
-#define IDS_BEATS_TIME                  13
-#define IDS_NXS_BIG_CLOCK_MENU          14
+#define IDS_ELAPSED                     3
+#define IDS_REMAINING                   4
+#define IDS_PLAYLIST_ELAPSED            5
+#define IDS_PLAYLIST_REMAINING          6
+#define IDS_TIME_OF_DAY                 7
+#define IDS_RESET_FONTS                 8
+#define IDS_CALCULATING                 9
+#define IDS_BEATS_TIME                  10
+#define IDS_NXS_BIG_CLOCK_MENU          11
 #define IDR_ACCELERATOR_WND             103
 #define IDB_PLEDIT                      105
 #define IDB_ML                          106
@@ -30,6 +30,8 @@
 #define IDB_ICON                        119
 #define IDB_ICON_H                      120
 #define IDR_CONTEXTMENU                 121
+#define IDR_GZ1                         124
+#define IDR_ABOUT_GZ                    124
 #define IDC_SHOWSBCHECK                 1019
 #define IDC_LEFTSCROLLBTN               1020
 #define IDC_RIGHTSCROLLBTN              1021
@@ -70,7 +72,7 @@
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        124
+#define _APS_NEXT_RESOURCE_VALUE        125
 #define _APS_NEXT_COMMAND_VALUE         40124
 #define _APS_NEXT_CONTROL_VALUE         1041
 #define _APS_NEXT_SYMED_VALUE           101

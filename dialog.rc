@@ -137,8 +137,8 @@ END
 //
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 1,15,3,0
- PRODUCTVERSION 1,15,3,0
+ FILEVERSION 1,15,4,0
+ PRODUCTVERSION 1,15,4,0
  FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -155,12 +155,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "WACUP"
             VALUE "FileDescription", "General Purpose Plug-in"
-            VALUE "FileVersion", "1.15.3.0"
+            VALUE "FileVersion", "1.15.4.0"
             VALUE "InternalName", "gen_bigclock.dll"
             VALUE "LegalCopyright", "Copyright © 2004-5 Saivert, Updated by Sebastian Pipping (2006), Addtional updates by Darren Owen aka DrO (2016-2024)"
             VALUE "OriginalFilename", "gen_bigclock.dll"
             VALUE "ProductName", "Big Clock"
-            VALUE "ProductVersion", "1.15.3.0"
+            VALUE "ProductVersion", "1.15.4.0"
         END
     END
     BLOCK "VarFileInfo"
@@ -186,13 +186,20 @@ END
 
 /////////////////////////////////////////////////////////////////////////////
 //
+// GZ
+//
+
+IDR_ABOUT_GZ            GZ                      "about.txt.gz"
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
 // String Table
 //
 
 STRINGTABLE
 BEGIN
     IDS_PLUGIN_NAME         "Big Clock v%s"
-    IDS_ABOUT_STRING        "This provides a separate time window with a range\nof display modes as well as simple visualisations.\n\nPlug-in originally by saivert (https://saivert.com/)\n\nUpdated by Sebastian Pipping (https://www.hartwork.org/)\n\nAdditional updates for WACUP by Darren Owen aka DrO\n\nSee https://getwacup.com/plugins/big_clock for\nupdates and also the source code as per the GPLv2 license.\n\nBuild date: %s"
     IDS_NXS_BIG_CLOCK       "Big Clock"
     IDS_ELAPSED             "Elapsed"
     IDS_REMAINING           "Remaining"

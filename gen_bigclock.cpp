@@ -34,7 +34,7 @@
 
 //#define USE_COMCTL_DRAWSHADOWTEXT
 
-#define PLUGIN_VERSION "1.15.3"
+#define PLUGIN_VERSION "1.15.4"
 
 #include <windows.h>
 #include <windowsx.h>
@@ -57,6 +57,7 @@
 #include <loader/loader/paths.h>
 #include <loader/loader/utils.h>
 #include <loader/loader/ini.h>
+#include <loader/hook/squash.h>
 #include "resource.h"
 
 /* global data */
@@ -431,9 +432,18 @@ reparse:
 #endif
 		case ID_CONTEXTMENU_ABOUT:
 		{
-			wchar_t message[2048] = {0};
-			StringCchPrintf(message, ARRAYSIZE(message), WASABI_API_LNGSTRINGW(IDS_ABOUT_STRING), TEXT(__DATE__));
-			//MessageBox(plugin.hwndParent, message, (LPWSTR)plugin.description, 0);
+			wchar_t message[1024] = { 0 };
+
+			DWORD data_size = 0;
+			unsigned char *data = (unsigned char *)WASABI_API_LNG->LoadResourceFromFileW(plugin.hDllInstance,
+									  plugin.hDllInstance, L"GZ", MAKEINTRESOURCE(IDR_ABOUT_GZ), &data_size);
+			unsigned char *output = NULL;
+			DecompressResource(data, data_size, &output, 0, false);
+
+			StringCchPrintf(message, ARRAYSIZE(message), (LPCWSTR)output, TEXT(__DATE__));
+
+			DecompressResourceFree(output);
+
 			AboutMessageBox(plugin.hwndParent, message, (LPWSTR)plugin.description);
 			break;
 		}
