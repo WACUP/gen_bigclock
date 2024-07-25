@@ -34,7 +34,7 @@
 
 //#define USE_COMCTL_DRAWSHADOWTEXT
 
-#define PLUGIN_VERSION "1.15.4"
+#define PLUGIN_VERSION "1.15.5"
 
 #include <windows.h>
 #include <windowsx.h>
@@ -565,7 +565,8 @@ void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 			// now we will attempt to create an embedded window which adds its own main menu entry
 			// and related keyboard accelerator (like how the media library window is integrated)
 			embed.flags |= EMBED_FLAGS_SCALEABLE_WND;	// double-size support!
-			hWndBigClock = CreateEmbeddedWindow(&embed, embed_guid);
+			hWndBigClock = CreateEmbeddedWindow(&embed, embed_guid, WASABI_API_LNGSTRINGW_BUF(IDS_NXS_BIG_CLOCK,
+																		  lang_string, ARRAYSIZE(lang_string)));
 
 #ifdef NATIVE_FREEZE
 			/* Subclass skinned window frame but only if it's needed for the window freezing*/
@@ -575,9 +576,6 @@ void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 #endif
 
 			// once the window is created we can then specify the window title and menu integration
-			SetWindowText(hWndBigClock, WASABI_API_LNGSTRINGW_BUF(IDS_NXS_BIG_CLOCK,
-											  lang_string, ARRAYSIZE(lang_string)));
-
 			WNDCLASSEX wcex = { 0 };
 			wcex.cbSize = sizeof(WNDCLASSEX);
 			wcex.lpszClassName = g_BigClockClassName;
@@ -587,8 +585,8 @@ void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 			wndclass = RegisterClassEx(&wcex);
 			if (wndclass)
 			{
-				g_BigClockWnd = CreateWindowEx(0, (LPCTSTR)wndclass, szAppName, WS_CHILD | WS_VISIBLE,
-											   0, 0, 0, 0, hWndBigClock, NULL, plugin.hDllInstance, NULL);
+				g_BigClockWnd = CreateWindowEx(WS_EX_NOPARENTNOTIFY, (LPCTSTR)wndclass, szAppName, WS_CHILD |
+											   WS_VISIBLE, 0, 0, 0, 0, hWndBigClock, 0, plugin.hDllInstance, 0);
 			}
 
 			// Note: WASABI_API_APP->app_addAccelerators(..) requires Winamp 5.53 and higher
