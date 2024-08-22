@@ -434,11 +434,8 @@ reparse:
 		{
 			wchar_t message[1024] = { 0 };
 
-			DWORD data_size = 0;
-			unsigned char *data = (unsigned char *)WASABI_API_LNG->LoadResourceFromFileW(plugin.hDllInstance,
-									  plugin.hDllInstance, L"GZ", MAKEINTRESOURCE(IDR_ABOUT_GZ), &data_size);
-			unsigned char *output = NULL;
-			DecompressResource(data, data_size, &output, 0, false);
+			const unsigned char* output = DecompressResourceText(plugin.hDllInstance,
+												  plugin.hDllInstance, IDR_ABOUT_GZ);
 
 			StringCchPrintf(message, ARRAYSIZE(message), (LPCWSTR)output, TEXT(__DATE__));
 
