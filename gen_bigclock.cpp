@@ -1102,9 +1102,7 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 							pltime = 0;
 							WASABI_API_LNGSTRINGW_BUF(IDS_CALCULATING, szTime, ARRAYSIZE(szTime));
 
-							CheckThreadHandleIsValid(&CalcThread);
-
-							if (!CalcThread) {
+							if (!CheckThreadHandleIsValid(&CalcThread)) {
 								CalcThread = StartThread(CalcLengthThread, 0, THREAD_PRIORITY_LOWEST, 0, NULL);
 							}
 							else {
@@ -1128,9 +1126,7 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 							pltime = 0;
 							WASABI_API_LNGSTRINGW_BUF(IDS_CALCULATING, szTime, ARRAYSIZE(szTime));
 
-							CheckThreadHandleIsValid(&CalcThread);
-
-							if (!CalcThread) {
+							if (!CheckThreadHandleIsValid(&CalcThread)) {
 								CalcThread = StartThread(CalcLengthThread, (LPVOID)1, THREAD_PRIORITY_LOWEST, 0, NULL);
 							}
 							else {
