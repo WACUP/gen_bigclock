@@ -34,7 +34,7 @@
 
 //#define USE_COMCTL_DRAWSHADOWTEXT
 
-#define PLUGIN_VERSION "1.15.6"
+#define PLUGIN_VERSION "1.16"
 
 #include <windows.h>
 #include <windowsx.h>
@@ -84,21 +84,23 @@ UINT WINAMP_NXS_BIG_CLOCK_MENUID = (ID_GENFF_LIMIT+101);
 static HWND g_BigClockWnd;
 static wchar_t g_BigClockClassName[] = L"NxSBigClockWnd";
 LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
-static HMENU g_hPopupMenu = 0;
+static HMENU g_hPopupMenu;
 static LPARAM ipc_bigclockinit = -1;
-static ATOM wndclass = 0;
-static HWND hWndBigClock = NULL;
-static embedWindowState embed = {0};
-static int upscaling = 1, dsize = 0, no_uninstall = 1;
-static HPEN hpenVis = NULL;
-static HFONT hfDisplay = NULL, hfMode = NULL;
-static LOGFONT lfDisplay = {0}, lfMode = {0};
+static ATOM wndclass;
+static HWND hWndBigClock;
+static embedWindowState embed = { 0 };
+static int upscaling = 1, dsize = 0, no_uninstall = 1,
+		   prevplpos = -1, resetCalc = 0, is_paused = 0,
+		   is_playing = 0, plpos = 0, itemlen = 0;
+static HPEN hpenVis;
+static HFONT hfDisplay, hfMode;
+static LOGFONT lfDisplay = { 0 }, lfMode = { 0 };
 static HANDLE CalcThread;
 static int64_t pltime;
-static int prevplpos = -1, resetCalc = 0;
+static RECT lastWnd = { 0 };
+static HDC cacheDC, cacheVisDC;
 
 // just using these to track the paused and playing states
-int is_paused = 0, is_playing = 0, plpos = 0, itemlen = 0;
 UINT pllen = 0;
 
 COLORREF clrBackground = RGB(0, 0, 0),
@@ -106,8 +108,6 @@ COLORREF clrBackground = RGB(0, 0, 0),
 		 clrVisOsc = RGB(0, 255, 0),
 		 clrVisSA = RGB(0, 255, 0),
 		 clrTimerTextShadow = 0x00808080;
-
-void DrawVisualization(HDC hdc, RECT r);
 
 DWORD WINAPI CalcLengthThread(LPVOID lp);
 DWORD_PTR CALLBACK ConfigDlgProc(HWND,UINT,WPARAM,LPARAM);
@@ -197,13 +197,12 @@ void UpdateSkinParts(void) {
 
 	if (hpenVis) {
 		DeleteObject(hpenVis);
+		hpenVis = NULL;
 	}
-	hpenVis = CreatePen(PS_SOLID, (!dsize ? 1 : 2)/*(!dsize ? 2 : 4)*/, clrVisOsc);
 
 	if (hfDisplay) {
 		DeleteObject(hfDisplay);
 	}
-
 	hfDisplay = CreateFontIndirect(&lfDisplay);
 
 	if (hfMode) {
@@ -211,9 +210,14 @@ void UpdateSkinParts(void) {
 	}
 	hfMode = CreateFontIndirect(&lfMode);
 
+	if (cacheDC) {
+		DeleteDC(cacheDC);
+		cacheDC = NULL;
+	}
+
 	if (IsWindow(g_BigClockWnd))
 	{
-		InvalidateRect(g_BigClockWnd, NULL, FALSE);
+		InvalidateRect(g_BigClockWnd, NULL, TRUE);
 	}
 }
 
@@ -233,7 +237,7 @@ void ReadFontSettings(void) {
 
 void CALLBACK UpdateWnTimerProc(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
 	if ((idEvent == UPDATE_TIMER_ID) && IsWindowVisible(hWnd)) {
-		InvalidateRect(hWnd, NULL, FALSE);
+		InvalidateRect(hWnd, NULL, TRUE);
 	}
 }
 
@@ -257,7 +261,7 @@ void SaveDisplayMode(void) {
 	else {
 		if (!is_playing) {
 			KillTimer(g_BigClockWnd, UPDATE_TIMER_ID);
-			InvalidateRect(g_BigClockWnd, NULL, FALSE);
+			InvalidateRect(g_BigClockWnd, NULL, TRUE);
 		}
 
 		// if changing to the playlist elapsed / remaining
@@ -449,7 +453,7 @@ reparse:
 	}
 	if (IsWindow(g_BigClockWnd))
 	{
-		InvalidateRect(g_BigClockWnd, NULL, FALSE);
+		InvalidateRect(g_BigClockWnd, NULL, TRUE);
 	}
 	return true;
 }
@@ -680,7 +684,7 @@ void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 					// drawing will deal with avoiding querying
 					// for vis data as needed vs being paused
 					//KillTimer(g_BigClockWnd, UPDATE_TIMER_ID);
-					InvalidateRect(g_BigClockWnd, NULL, FALSE);
+					InvalidateRect(g_BigClockWnd, NULL, TRUE);
 				}
 			}
 			else if (!cur_playing && (is_playing == 1)) {
@@ -688,14 +692,14 @@ void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 				if ((config_displaymode != NXSBCDM_TIMEOFDAY) &&
 					(config_displaymode != NXSBCDM_BEATSTIME)) {
 					KillTimer(g_BigClockWnd, UPDATE_TIMER_ID);
-					InvalidateRect(g_BigClockWnd, NULL, FALSE);
+					InvalidateRect(g_BigClockWnd, NULL, TRUE);
 				}
 			}
 			else if (!cur_playing && (is_playing == 0)) {
 				pllen = GetPlaylistLength();
 				plpos = GetPlaylistPosition();
 				itemlen = GetCurrentTrackLengthMilliSeconds();
-				InvalidateRect(g_BigClockWnd, NULL, FALSE);
+				InvalidateRect(g_BigClockWnd, NULL, TRUE);
 			}
 			else
 			{
@@ -816,7 +820,7 @@ startCalc:
 
 	if (IsWindow(g_BigClockWnd))
 	{
-		InvalidateRect(g_BigClockWnd, NULL, FALSE);
+		InvalidateRect(g_BigClockWnd, NULL, TRUE);
 	}
 
 	if (CalcThread)
@@ -881,6 +885,12 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 			DeleteObject(hfMode);
 			hfMode = NULL;
 		}
+
+		if (cacheDC) {
+			DeleteDC(cacheDC);
+			cacheDC = NULL;
+		}
+
 		DestroyMenu(g_hPopupMenu);
 		KillTimer(hWnd, UPDATE_TIMER_ID);
 		break;
@@ -1034,35 +1044,64 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 			UpdateSkinParts();
 		}
 		return 0;
+
+	case WM_NCPAINT:
+		{
+			return 0;
+		}
 	case WM_ERASEBKGND:
 		{
-			// handled in WM_PAINT
-			return 1;
-		}
-	case WM_PAINT:
-		{
-			RECT r = {0};
-			wchar_t szTime[256] = {0};
+			RECT r = { 0 };
+			wchar_t szTime[256] = { 0 };
 
 			int64_t pos = 0; // The position we display in our big clock
 			int dwDisplayMode = 0;
 
 			GetClientRect(hWnd, &r);
 
+			if (memcmp(&lastWnd, &r, sizeof(RECT)))
+			{
+				if (cacheDC)
+				{
+					DeleteDC(cacheDC);
+					cacheDC = NULL;
+				}
+
+				lastWnd = r;
+			}
+
 			// Create double-buffer
-			HDC hdc = CreateCompatibleDC(NULL);
-			HDC hdcwnd = GetDC(hWnd);
-			HBITMAP hbm = CreateCompatibleBitmap(hdcwnd, r.right, r.bottom);
-			ReleaseDC(hWnd, hdcwnd);
-			HBITMAP holdbm = (HBITMAP)SelectObject(hdc, hbm);
+			const HDC hdcwnd = (HDC)wParam;
+			if (!cacheDC)
+			{
+				cacheDC = CreateCompatibleDC(hdcwnd);
+
+				if (cacheDC)
+				{
+					// for the vis handling we'll double-height the bitmap to just use one obj
+					const HBITMAP hbm = CreateCompatibleBitmap(hdcwnd, r.right, r.bottom * 2);
+					SelectObject(cacheDC, hbm);
+					DeleteObject(hbm);
+
+					SetBkMode(cacheDC, TRANSPARENT);
+
+					/* Create the pen for the line drawings */
+					if (!hpenVis)
+					{
+						hpenVis = CreatePen(PS_SOLID, (!dsize ? 1 : 2), clrVisOsc);
+					}
+					DeleteObject(SelectObject(cacheDC, hpenVis));
+				}
+			}
 
 			// Paint the background
-			SetBkColor(hdc, clrBackground);
-			SetBkMode(hdc, TRANSPARENT);
+			SetBkColor(cacheDC, clrBackground);
 			
-			FillRectWithColour(hdc, &r, clrBackground, FALSE);
+			RECT full = r;
+			full.bottom *= 2;
+			FillRectWithColour(cacheDC, &full, clrBackground, FALSE);
 
-			HFONT holdfont = (HFONT)SelectObject(hdc, hfDisplay);
+			const HFONT holdfont = (HFONT)SelectObject(cacheDC, hfDisplay);
 
 			switch (config_displaymode) {
 				case NXSBCDM_DISABLED:
@@ -1140,15 +1179,16 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 					break;
 				case NXSBCDM_TIMEOFDAY:
 					{
-						SYSTEMTIME st = {0};
+						SYSTEMTIME st = { 0 };
 						GetLocalTime(&st);
-						pos = ((st.wHour*60*60)+(st.wMinute*60)+st.wSecond)*1000+st.wMilliseconds;
+						pos = ((st.wHour * 60 * 60) + (st.wMinute * 60) +
+								st.wSecond) * 1000 + st.wMilliseconds;
 						dwDisplayMode = IDS_TIME_OF_DAY;
 					}
 					break;
 				case NXSBCDM_BEATSTIME:
 					{
-						SYSTEMTIME st = {0};
+						SYSTEMTIME st = { 0 };
 						GetSystemTime(&st);
 						// need to convert this to be UTC+1 & account
 						// for the wrapping of the time from the UTC
@@ -1172,36 +1212,155 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 				int len = (!szTime[0] ? (int)GetFormattedTime(szTime, ARRAYSIZE(szTime), pos,
 						  (config_displaymode == NXSBCDM_TIMEOFDAY) ? 1 : (((config_displaymode ==
 						  NXSBCDM_REMAININGTIME) && !config_centi) ? 2 : 0)) : (int)wcslen(szTime));
+				const int height = (r.bottom - r.top);
+				r.top += height;
+				r.bottom += height;
 
 				if (config_shadowtextnew) {
 					// Draw text's "shadow"
 					r.left += 5;
 					r.top += 5;
-					SetTextColor(hdc, clrTimerTextShadow);
-					DrawText(hdc, szTime, len, &r, DT_CENTER|DT_VCENTER|DT_SINGLELINE);
+					SetTextColor(cacheDC, clrTimerTextShadow);
+					DrawText(cacheDC, szTime, len, &r, DT_CENTER|DT_VCENTER|DT_SINGLELINE);
 
 					// Draw text
 					r.left -= 5;
 					r.top -= 5;
 				}
 
-				SetTextColor(hdc, clrTimerText);
-				DrawText(hdc, szTime, len, &r, DT_CENTER|DT_VCENTER|DT_SINGLELINE);
+				SetTextColor(cacheDC, clrTimerText);
+				DrawText(cacheDC, szTime, len, &r, DT_CENTER|DT_VCENTER|DT_SINGLELINE);
+
+				r.top -= height;
+				r.bottom -= height;
 			}
 			else {
-				SetTextColor(hdc, clrTimerText);
+				SetTextColor(cacheDC, clrTimerText);
 			}
 
-			SelectObject(hdc, holdfont);
-
-			/* Only draw visualization if Winamp is playing music and one of the visualization modes are on */
+			/* Only draw visualization if WACUP is playing music and one of the visualization modes are on */
 			if (is_playing && ((config_vismode & NXSBCVM_OSC) == NXSBCVM_OSC ||
 				(config_vismode & NXSBCVM_SPEC) == NXSBCVM_SPEC)) {
-				DrawVisualization(hdc, r);
+				static char* (__cdecl *export_sa_get)(char data[75*2 + 8]);
+				static void (__cdecl *export_sa_setreq)(int);
+
+				/* Get function pointers from WACUP */
+				if (!export_sa_get) {
+					export_sa_get = (char* (__cdecl *)(char data[75*2 + 8]))GetSADataFunc(2);
+				}
+				if (!export_sa_setreq) {
+					export_sa_setreq = (void (__cdecl *)(int))GetSADataFunc(1);
+				}
+
+				/* Clear background */
+				RECT rVis = r;
+				int height = (rVis.bottom - rVis.top);
+				rVis.top += height;
+				rVis.bottom += height;
+
+				/* Specify, that we want both spectrum and oscilloscope data */
+				if (export_sa_setreq) export_sa_setreq(1); /* Pass 0 (zero) and get spectrum data only */
+
+				static char data[75*2 + 8];
+				// no need to query for the vis data if we're paused
+				// as it shouldn't be changing & we can use the last
+				// vis data that was received for drawing when paused
+				const char *sadata = (export_sa_get && !is_paused ? // Visualization data
+									  export_sa_get(data) : data);
+				if (sadata) {
+					/* Render the oscilloscope */
+					if ((config_vismode & NXSBCVM_OSC) == NXSBCVM_OSC) {
+						// this is not 'exact' but it'll do for the moment
+						const int interval = (int)ceil(rVis.right / 75.0f),
+								  top = (height / 2),
+								  scaling = (int)ceil((top + 40) / 40.0f);
+
+						// start at the correct initial position so there isn't
+						// a partial line drawn from the centre line up to that
+						// which can look wrong if looking too closely at it...
+						MoveToEx(cacheDC, rVis.left, top + (sadata[75] * scaling), NULL);
+
+						POINT points[74];
+						for (int x = 0; x < ARRAYSIZE(points); x++)
+						{
+							points[x].x = (rVis.left + (x * interval));
+							points[x].y = (top + (sadata[75 + x] * scaling));
+						}
+
+						Polyline(cacheDC, points, ARRAYSIZE(points));
+						/*/
+						for (int x = 1; x < 75; x++) {
+							LineTo(cacheDC, r.left + (x * interval), (r.top + top) + (sadata[75 + x] * scaling));
+						}/**/
+					}
+
+					/* Render the spectrum */
+					if ((config_vismode & NXSBCVM_SPEC) == NXSBCVM_SPEC) {
+						static char sapeaks[150], safalloff[150], sapeaksdec[150];
+
+						// this is not 'exact' but it'll do for the moment
+						const int interval = (int)ceil(rVis.right / 75.0f),
+								  scaling = (int)ceil((height - 40) / 40.0f);
+						for (int x = 0; x < 75; x++)
+						{
+							if (!is_paused)
+							{
+								/* Fix peaks & falloff */
+								if (sadata[x] > sapeaks[x]) {
+									sapeaks[x] = sadata[x];
+									sapeaksdec[x] = 0;
+								}
+								else {
+									sapeaks[x] = sapeaks[x] - 1;
+
+									if (sapeaksdec[x] >= 8) {
+										sapeaks[x] = (char)(int)(sapeaks[x] - 0.3 * (sapeaksdec[x] - 8));
+									}
+									if (sapeaks[x] < 0) {
+										sapeaks[x] = 0;
+									}
+									else {
+										sapeaksdec[x] = sapeaksdec[x] + 1;
+									}
+								}
+
+								if (sadata[x] > safalloff[x]) {
+									safalloff[x] = sadata[x];
+								}
+								else {
+									safalloff[x] = safalloff[x] - 2;
+								}
+
+								/*MoveToEx(hdc, rVis.left+(x*interval), rVis.bottom, NULL);
+								LineTo(hdc, rVis.left+(x*interval), rVis.bottom - safalloff[x]);
+
+								// Draw peaks
+								MoveToEx(hdc, rVis.left+(x*interval), rVis.bottom - safalloff[x], NULL);
+								LineTo(hdc, rVis.left+(x*interval), rVis.bottom - safalloff[x]);*/
+							}
+
+							// Draw peaks as bars to better fill the window space whilst
+							// not doing a 75px wide image upscaled (which really sucks)
+							const RECT peak = { rVis.left + (x * interval) + 1, height - (safalloff[x] *
+												scaling), rVis.left + ((x + 1) * interval) - 1, height };
+							if ((peak.bottom - peak.top) > 0) {
+								FillRectWithColour(cacheDC, &peak, clrVisSA, FALSE);
+							}
+						}
+					}
+				}
 			}
 
+			SelectObject(cacheDC, holdfont);
+
+			// re-jig the final output so things are blended as needed
+			// from the two possible parts of the image now available
+			const BLENDFUNCTION blendfn = { 0, 0, (BYTE)(is_playing ? 175 : 255), 0 };
+			GdiAlphaBlend(cacheDC, r.left, r.top, r.right, r.bottom, cacheDC, r.left,
+						  (r.top + (r.bottom - r.top)), r.right, r.bottom, blendfn);
+
 			if (config_showdisplaymode && dwDisplayMode > 0) {
-				holdfont = (HFONT)SelectObject(hdc, hfMode);
+				SelectObject(cacheDC, hfMode);
 
 				static int dwLastDisplayMode = -1;
 				static LPWSTR lpszDisplayMode;
@@ -1221,153 +1380,17 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 					dwLastDisplayMode = dwDisplayMode;
 				}
 
-				SIZE s = {0};
-				GetTextExtentPoint32(hdc, lpszDisplayMode, lpszDisplayModeLen, &s);
-				TextOut(hdc, 0, r.bottom-s.cy, lpszDisplayMode, lpszDisplayModeLen);
-
-				SelectObject(hdc, holdfont);
+				SIZE s = { 0 };
+				GetTextExtentPoint32(cacheDC, lpszDisplayMode, lpszDisplayModeLen, &s);
+				TextOut(cacheDC, 0, (r.bottom - s.cy), lpszDisplayMode, lpszDisplayModeLen);
 			}
 
-			PAINTSTRUCT ps = {0};
-			hdcwnd = BeginPaint(hWnd, &ps);
-
-			// Copy double-buffer to screen
-			// we use the client area instead of
-			// using the paint area as it's not
-			// the same if partially off-screen
-			BitBlt(hdcwnd, r.left, r.top, r.right, r.bottom, hdc, 0, 0, SRCCOPY);
-
-			EndPaint(hWnd, &ps);
-
-			// Destroy double-buffer
-			SelectObject(hdc, holdbm);
-			DeleteObject(hbm);
-			DeleteDC(hdc);
+			BitBlt(hdcwnd, r.left, r.top, r.right, r.bottom, cacheDC, 0, 0, SRCCOPY);
 		}
-		return 0;
+		return 1;
 	}
 
 	return DefWindowProc(hWnd, uMsg, wParam, lParam);
-}
-
-void DrawVisualization(HDC hdc, RECT r)
-{
-	BLENDFUNCTION bf={0,0,80,0};
-
-	static char* (__cdecl *export_sa_get)(char data[75*2 + 8]);
-	static void (__cdecl *export_sa_setreq)(int);
-
-	/* Get function pointers from Winamp */
-	if (!export_sa_get) {
-		export_sa_get = (char* (__cdecl *)(char data[75*2 + 8]))GetSADataFunc(2);
-	}
-	if (!export_sa_setreq) {
-		export_sa_setreq = (void (__cdecl *)(int))GetSADataFunc(1);
-	}
-
-	HDC hdcVis = CreateCompatibleDC(NULL);
-	HBITMAP hbmVis = CreateCompatibleBitmap(hdc, r.right, r.bottom);
-	HBITMAP holdbmVis = (HBITMAP)SelectObject(hdcVis, hbmVis);
-
-	/* Create the pen for the line drawings */
-	HPEN holdpenVis = (HPEN)SelectObject(hdcVis, hpenVis);
-
-	/* Clear background */
-	FillRectWithColour(hdcVis, &r, clrBackground, FALSE);
-
-	/* Specify, that we want both spectrum and oscilloscope data */
-	if (export_sa_setreq) export_sa_setreq(1); /* Pass 0 (zero) and get spectrum data only */
-
-	static char data[75*2 + 8];
-	// no need to query for the vis data if we're paused
-	// as it shouldn't be changing & we can use the last
-	// vis data that was received for drawing when paused
-	const char *sadata = (export_sa_get && !is_paused ? // Visualization data
-						  export_sa_get(data) : data);
-	if (sadata) {
-		/* Render the oscilloscope */
-		if ((config_vismode & NXSBCVM_OSC) == NXSBCVM_OSC) {
-			// this is not 'exact' but it'll do for the moment
-			const int interval = (int)ceil(r.right / 75.0f),
-					  top = ((r.bottom) / 2),
-					  scaling = (int)ceil((top + 40) / 40.0f);
-
-			// start at the correct initial position so there isn't
-			// a partial line drawn from the centre line up to that
-			// which can look wrong if looking too closely at it...
-			MoveToEx(hdcVis, r.left, (r.top + top) + (sadata[75] * scaling), NULL);
-			for (int x = 1; x < 75; x++) {
-				LineTo(hdcVis, r.left + (x * interval), (r.top + top) + (sadata[75 + x] * scaling));
-			}
-		}
-
-		/* Render the spectrum */
-		if ((config_vismode & NXSBCVM_SPEC) == NXSBCVM_SPEC) {
-			RECT rVis = { 0,0,r.right,r.bottom };
-			static char sapeaks[150];
-			static char safalloff[150];
-			static char sapeaksdec[150];
-
-			// this is not 'exact' but it'll do for the moment
-			const int interval = (int)ceil(rVis.right / 75.0f),
-					  scaling = (int)ceil((rVis.bottom - 40) / 40.0f);
-			for (int x = 0; x < 75; x++)
-			{
-				if (!is_paused)
-				{
-					/* Fix peaks & falloff */
-					if (sadata[x] > sapeaks[x]) {
-						sapeaks[x] = sadata[x];
-						sapeaksdec[x] = 0;
-					}
-					else {
-						sapeaks[x] = sapeaks[x] - 1;
-
-						if (sapeaksdec[x] >= 8) {
-							sapeaks[x] = (char)(int)(sapeaks[x] - 0.3 * (sapeaksdec[x] - 8));
-						}
-						if (sapeaks[x] < 0) {
-							sapeaks[x] = 0;
-						}
-						else {
-							sapeaksdec[x] = sapeaksdec[x] + 1;
-						}
-					}
-
-					if (sadata[x] > safalloff[x]) {
-						safalloff[x] = sadata[x];
-					}
-					else {
-						safalloff[x] = safalloff[x] - 2;
-					}
-
-					/*MoveToEx(hdc, rVis.left+(x*interval), rVis.bottom, NULL);
-					LineTo(hdc, rVis.left+(x*interval), rVis.bottom - safalloff[x]);
-
-					// Draw peaks
-					MoveToEx(hdc, rVis.left+(x*interval), rVis.bottom - safalloff[x], NULL);
-					LineTo(hdc, rVis.left+(x*interval), rVis.bottom - safalloff[x]);*/
-				}
-
-				// Draw peaks as bars to better fill the window space whilst
-				// not doing a 75px wide image upscaled (which really sucks)
-				const RECT peak = {rVis.left+(x*interval)+1, rVis.bottom - (safalloff[x] * scaling),
-								   rVis.left+((x+1)*interval)-1, rVis.bottom};
-				FillRectWithColour(hdcVis, &peak, clrVisSA, FALSE);
-			}
-		}
-	}
-
-	SelectObject(hdcVis, holdpenVis);
-
-	// Blit to screen
-	GdiAlphaBlend(hdc, r.left, r.top, r.right, r.bottom,
-				  hdcVis, 0, 0, r.right, r.bottom, bf);
-
-	// Destroy vis bitmap/DC
-	SelectObject(hdcVis, holdbmVis);
-	DeleteObject(hbmVis);
-	DeleteDC(hdcVis);
 }
 
 #ifdef NATIVE_FREEZE
