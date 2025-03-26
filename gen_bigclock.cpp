@@ -34,7 +34,7 @@
 
 //#define USE_COMCTL_DRAWSHADOWTEXT
 
-#define PLUGIN_VERSION "1.16.1"
+#define PLUGIN_VERSION "1.16.2"
 
 #include <windows.h>
 #include <windowsx.h>
@@ -863,11 +863,11 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 		// prevent closing the skinned frame from destroying this window
 		return 1;
 	case WM_DESTROY:
-		if (CalcThread) {
+		if (CheckThreadHandleIsValid(&CalcThread)) {
 			WaitForSingleObjectEx(CalcThread, INFINITE, TRUE);
-			if (CalcThread) {
+			if (CalcThread != NULL) {
 				CloseHandle(CalcThread);
-				CalcThread = 0;
+				CalcThread = NULL;
 			}
 		}
 
