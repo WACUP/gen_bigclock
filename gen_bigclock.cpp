@@ -34,7 +34,7 @@
 
 //#define USE_COMCTL_DRAWSHADOWTEXT
 
-#define PLUGIN_VERSION "1.16.2"
+#define PLUGIN_VERSION "1.16.3"
 
 #include <windows.h>
 #include <windowsx.h>
@@ -326,7 +326,7 @@ bool ProcessMenuResult(WPARAM command, HWND parent) {
 			break;
 		case ID_CONTEXTMENU_RESETFONTS:
 			{
-				if (MessageBox(parent, WASABI_API_LNGSTRINGW(IDS_RESET_FONTS),
+				if (MessageBox(parent, LangString(IDS_RESET_FONTS),
 							   (LPWSTR)plugin.description, MB_YESNO |
 							   MB_ICONQUESTION | MB_DEFBUTTON2) == IDNO) {
 					break;
@@ -384,11 +384,11 @@ bool ProcessMenuResult(WPARAM command, HWND parent) {
 				} else {
 					memset(&lfDisplay, 0, sizeof(lfDisplay));
 					lfDisplay.lfHeight = -50;
-					StringCchCopy(lfDisplay.lfFaceName, LF_FACESIZE, L"Arial");
+					CopyCchStr(lfDisplay.lfFaceName, ARRAYSIZE(lfDisplay.lfFaceName), L"Arial");
 
 					memset(&lfMode, 0, sizeof(lfMode));
 					lfMode.lfHeight = -13;
-					StringCchCopy(lfMode.lfFaceName, LF_FACESIZE, L"Arial");
+					CopyCchStr(lfMode.lfFaceName, ARRAYSIZE(lfMode.lfFaceName), L"Arial");
 				}
 
 reparse:
@@ -441,7 +441,7 @@ reparse:
 			const unsigned char* output = DecompressResourceText(plugin.hDllInstance,
 												  plugin.hDllInstance, IDR_ABOUT_GZ);
 
-			StringCchPrintf(message, ARRAYSIZE(message), (LPCWSTR)output, TEXT(__DATE__));
+			PrintfCch(message, ARRAYSIZE(message), (LPCWSTR)output, TEXT(__DATE__));
 
 			DecompressResourceFree(output);
 
@@ -459,7 +459,7 @@ reparse:
 }
 
 void config(void) {
-	HMENU hMenu = WASABI_API_LOADMENUW(IDR_CONTEXTMENU),
+	HMENU hMenu = LangLoadMenu(IDR_CONTEXTMENU),
 		  popup = GetSubMenu(hMenu, 0);
 
 	AddItemToMenu2(popup, 0, (LPWSTR)plugin.description, 0, 1);
@@ -505,14 +505,14 @@ int init(void) {
 		ServiceBuild(WASABI_API_SVC, WASABI_API_LNG, languageApiGUID);/*/
 		/*WASABI_API_LNG = plugin.language;/**/
 		// TODO add to lang.h
-		/*WASABI_API_START_LANG(plugin.hDllInstance, embed_guid);
+		/*StartPluginLangOnly(plugin.hDllInstance, embed_guid);
 
 		wchar_t pluginTitleW[256] = { 0 };
-		StringCchPrintf(pluginTitleW, ARRAYSIZE(pluginTitleW), WASABI_API_LNGSTRINGW(IDS_PLUGIN_NAME), TEXT(PLUGIN_VERSION));
-		plugin.description = (char*)plugin.memmgr->sysDupStr(pluginTitleW);*/
+		PrintfCch(pluginTitleW, ARRAYSIZE(pluginTitleW), LangString(IDS_PLUGIN_NAME), TEXT(PLUGIN_VERSION));
+		plugin.description = (char*)SafeWideDup(pluginTitleW);*/
 
-		WASABI_API_START_LANG_DESC(plugin.language, plugin.hDllInstance, embed_guid,
-						IDS_PLUGIN_NAME, TEXT(PLUGIN_VERSION), &plugin.description);
+		StartPluginLangWithDesc(plugin.hDllInstance, embed_guid, IDS_PLUGIN_NAME,
+									  TEXT(PLUGIN_VERSION), &plugin.description);
 
 		// wParam must have something provided else it returns 0
 		// and then acts like a IPC_GETVERSION call... not good!
@@ -560,14 +560,14 @@ void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 			// finally we add menu items to the main right-click menu and the views menu
 			// with Modern skins which support showing the views menu for accessing windows
 			wchar_t lang_string[32] = { 0 };
-			AddEmbeddedWindowToMenus(WINAMP_NXS_BIG_CLOCK_MENUID, WASABI_API_LNGSTRINGW_BUF(IDS_NXS_BIG_CLOCK_MENU,
-																lang_string, ARRAYSIZE(lang_string)), visible, -1);
+			AddEmbeddedWindowToMenus(WINAMP_NXS_BIG_CLOCK_MENUID, LngStringCopy(IDS_NXS_BIG_CLOCK_MENU,
+													lang_string, ARRAYSIZE(lang_string)), visible, -1);
 
 			// now we will attempt to create an embedded window which adds its own main menu entry
 			// and related keyboard accelerator (like how the media library window is integrated)
 			embed.flags |= EMBED_FLAGS_SCALEABLE_WND;	// double-size support!
-			hWndBigClock = CreateEmbeddedWindow(&embed, embed_guid, WASABI_API_LNGSTRINGW_BUF(IDS_NXS_BIG_CLOCK,
-																		  lang_string, ARRAYSIZE(lang_string)));
+			hWndBigClock = CreateEmbeddedWindow(&embed, embed_guid, LngStringCopy(IDS_NXS_BIG_CLOCK,
+															  lang_string, ARRAYSIZE(lang_string)));
 
 #ifdef NATIVE_FREEZE
 			/* Subclass skinned window frame but only if it's needed for the window freezing*/
@@ -732,22 +732,26 @@ int GetFormattedTime(LPWSTR lpszTime, const UINT size, const int64_t iPos, const
 	time_s -= seconds;
 	int dsec = (int)(time_s*100);
 
-	size_t remaining = size;
+	int len = 0;
 	if (mode != 1) {
 		/*const wchar_t szFmtFull[] = L"%d:%.2d:%.2d\0";
 		if (days > 0) {
-			StringCchPrintf(lpszTime, size, L"%d %d:%.2d:%.2d\0", days, hours, minutes, seconds);
+			PrintfCch(lpszTime, size, L"%d %d:%.2d:%.2d\0", days, hours, minutes, seconds);
 		}
 		else if (hours > 0) {
-			StringCchPrintf(lpszTime, size, szFmtFull, hours, minutes, seconds);
+			PrintfCch(lpszTime, size, szFmtFull, hours, minutes, seconds);
 		}
 		else {
-			StringCchPrintf(lpszTime, size, szFmtFull + 3, minutes, seconds);
+			PrintfCch(lpszTime, size, szFmtFull + 3, minutes, seconds);
 		}/*/
-		plugin.language->FormattedTimeString(lpszTime, size, (int)(!mode ? (iPos / 1000LL) :
-														 ceil(iPos/1000.f)), 0, &remaining);
+		size_t remaining = size;
+		FormattedTimeString(lpszTime, size, (int)(!mode ? (iPos / 1000LL) :
+										ceil(iPos/1000.f)), 0, &remaining);
 		if (!*lpszTime)	{
-			StringCchCopyEx(lpszTime, size, L"0:00", NULL, &remaining, NULL);
+			len = (int)CopyCchStrEx(lpszTime, size, L"0:00");
+		}
+		else {
+			len = (int)(size - remaining);
 		}
 	}
 	else {
@@ -756,29 +760,26 @@ int GetFormattedTime(LPWSTR lpszTime, const UINT size, const int64_t iPos, const
 		if (config_timeofdaymode & 1) {
 			const wchar_t szFmtFull[] = L"%d:%.2d:%.2d%s%s\0",
 						  szFmtFullCenti[] = L"%d:%.2d:%.2d.%.2d%s\0";
-			StringCchPrintfEx(lpszTime, size, NULL, &remaining, NULL, (!config_centi ?
-							  szFmtFull : szFmtFullCenti), (!show_24hrs && (hours > 12) ?
-							  (hours - 12) : hours), minutes, seconds, (config_centi ?
-							  dsec : (intptr_t)L""), (show_24hrs ? L"" : ((hours >= 12) ?
-							  (show_dot ? L" ." : L"pm") : (show_dot ? L"" : L"am"))));
+			len = (int)PrintfCch(lpszTime, size, (!config_centi ? szFmtFull : szFmtFullCenti),
+								 (!show_24hrs && (hours > 12) ? (hours - 12) : hours), minutes,
+								 seconds, (config_centi ? dsec : (intptr_t)L""), (show_24hrs ?
+								 L"" : ((hours >= 12) ? (show_dot ? L" ." : L"pm") : (show_dot ?
+								 L"" : L"am"))));
 		}
 		else {
 			const wchar_t szFmtNoSec[] = L"%d:%.2d%s\0";
-			StringCchPrintfEx(lpszTime, size, NULL, &remaining, NULL, szFmtNoSec,
-							  (!show_24hrs && (hours > 12) ? (hours - 12) : hours),
-							  minutes, (show_24hrs ? L"" : (hours >= 12 ? (show_dot ?
-										L" ." : L"pm") : (show_dot ? L"" : L"am"))));
+			len = (int)PrintfCch(lpszTime, size, szFmtNoSec, (!show_24hrs && (hours > 12) ?
+								 (hours - 12) : hours), minutes, (show_24hrs ? L"" :
+								 (hours >= 12 ? (show_dot ? L" ." : L"pm") : (show_dot ? L"" : L"am"))));
 		}
 	}
 
 	if (!mode && config_centi) {
 		const wchar_t szMsFmt[] = L".%.2d";
-		size_t offset = (size - remaining);
-		StringCchPrintfEx((lpszTime + offset), (size - offset),
-						   NULL, &remaining, 0, szMsFmt, dsec);
+		len += (int)PrintfCch((lpszTime + len), (size - len), szMsFmt, dsec);
 	}
 
-	return (int)(size - remaining);
+	return len;
 }
 
 DWORD WINAPI CalcLengthThread(LPVOID lp)
@@ -853,7 +854,7 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 				UpdateSkinParts();
 			}
 
-			HACCEL accel = WASABI_API_LOADACCELERATORSW(IDR_ACCELERATOR_WND);
+			HACCEL accel = LangAcceleratorTable(IDR_ACCELERATOR_WND);
 			if (accel) {
 				/*WASABI_API_APP*/plugin.app->app_addAccelerators(hWnd, &accel, 1, TRANSLATE_MODE_NORMAL);
 			}
@@ -950,7 +951,7 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 			}
 
 			if (!g_hPopupMenu) {
-				g_hPopupMenu = GetSubMenu(WASABI_API_LOADMENUW(IDR_CONTEXTMENU), 0);
+				g_hPopupMenu = GetSubMenu(LangLoadMenu(IDR_CONTEXTMENU), 0);
 			}
 
 			CheckMenuItem(g_hPopupMenu, ID_CONTEXTMENU_SHOWDISPLAYMODE,
@@ -1122,7 +1123,7 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 								itemlen = 0;
 							}
 						}
-						pos = (itemlen - GetCurrentTrackPos());
+						pos = (int64_t)(itemlen - GetCurrentTrackPos());
 						dwDisplayMode = IDS_REMAINING;
 					}
 					break;
@@ -1135,7 +1136,7 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 
 							// Get combined duration of all songs up to (but not including) the current song
 							pltime = 0;
-							WASABI_API_LNGSTRINGW_BUF(IDS_CALCULATING, szTime, ARRAYSIZE(szTime));
+							LngStringCopy(IDS_CALCULATING, szTime, ARRAYSIZE(szTime));
 
 							if (!CheckThreadHandleIsValid(&CalcThread)) {
 								CalcThread = StartThread(CalcLengthThread, 0, THREAD_PRIORITY_LOWEST, 0, NULL);
@@ -1159,10 +1160,10 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 
 							// Get combined duration of all songs from and including the current song to end of list
 							pltime = 0;
-							WASABI_API_LNGSTRINGW_BUF(IDS_CALCULATING, szTime, ARRAYSIZE(szTime));
+							LngStringCopy(IDS_CALCULATING, szTime, ARRAYSIZE(szTime));
 
 							if (!CheckThreadHandleIsValid(&CalcThread)) {
-								CalcThread = StartThread(CalcLengthThread, (LPVOID)1, THREAD_PRIORITY_LOWEST, 0, NULL);
+								CalcThread = StartThread(CalcLengthThread, 0, THREAD_PRIORITY_LOWEST, 0, NULL);
 							}
 							else {
 								resetCalc = 1;
@@ -1181,8 +1182,8 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 					{
 						SYSTEMTIME st = { 0 };
 						GetLocalTime(&st);
-						pos = ((st.wHour * 60 * 60) + (st.wMinute * 60) +
-								st.wSecond) * 1000 + st.wMilliseconds;
+						pos = (int64_t)((st.wHour * 60 * 60) + (st.wMinute * 60) +
+											st.wSecond) * 1000 + st.wMilliseconds;
 						dwDisplayMode = IDS_TIME_OF_DAY;
 					}
 					break;
@@ -1201,8 +1202,8 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 							++st.wHour;
 						}
 
-						StringCchPrintf(szTime, ARRAYSIZE(szTime), (config_centi ? L"@%.02f" : L"@%.f"),
-										(((st.wHour * 3600) + (st.wMinute * 60) + st.wSecond) * (1 / 86.4f)));
+						PrintfCch(szTime, ARRAYSIZE(szTime), (config_centi ? L"@%.02f" : L"@%.f"),
+								  (((st.wHour * 3600) + (st.wMinute * 60) + st.wSecond) * (1 / 86.4f)));
 						dwDisplayMode = IDS_BEATS_TIME;
 					}
 					break;
@@ -1221,7 +1222,7 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 					r.left += 5;
 					r.top += 5;
 					SetTextColor(cacheDC, clrTimerTextShadow);
-					DrawText(cacheDC, szTime, len, &r, DT_CENTER|DT_VCENTER|DT_SINGLELINE);
+					DrawTextEx(cacheDC, szTime, len, &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE, NULL);
 
 					// Draw text
 					r.left -= 5;
@@ -1229,7 +1230,7 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 				}
 
 				SetTextColor(cacheDC, clrTimerText);
-				DrawText(cacheDC, szTime, len, &r, DT_CENTER|DT_VCENTER|DT_SINGLELINE);
+				DrawTextEx(cacheDC, szTime, len, &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE, NULL);
 
 				r.top -= height;
 				r.bottom -= height;
@@ -1372,9 +1373,9 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 				{
 					if (lpszDisplayMode)
 					{
-						plugin.memmgr->sysFree(lpszDisplayMode);
+						SafeFree(lpszDisplayMode);
 					}
-					lpszDisplayMode = WASABI_API_LNGSTRINGW_DUP(dwDisplayMode);
+					lpszDisplayMode = LngStringDup(dwDisplayMode);
 					lpszDisplayModeLen = (int)wcslen(lpszDisplayMode);
 
 					dwLastDisplayMode = dwDisplayMode;
@@ -1434,9 +1435,8 @@ extern "C" __declspec (dllexport) winampGeneralPurposePlugin * winampGetGeneralP
 extern "C" __declspec(dllexport) int winampUninstallPlugin(HINSTANCE hDllInst, HWND hwndDlg, int param)
 {
 	// prompt to remove our settings with default as no (just incase)
-	if (plugin.language->UninstallSettingsPrompt(reinterpret_cast<const wchar_t*>(plugin.description)))
+	if (UninstallSettingsPrompt(reinterpret_cast<const wchar_t*>(plugin.description), WINAMP_INI, PLUGIN_INISECTION))
 	{
-		SaveNativeIniString(WINAMP_INI, PLUGIN_INISECTION, 0, 0);
 		no_uninstall = 0;
 	}
 
