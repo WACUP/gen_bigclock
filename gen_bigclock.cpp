@@ -34,7 +34,7 @@
 
 //#define USE_COMCTL_DRAWSHADOWTEXT
 
-#define PLUGIN_VERSION "1.16.3"
+#define PLUGIN_VERSION "1.17.1"
 
 #include <windows.h>
 #include <windowsx.h>
@@ -88,7 +88,7 @@ static HMENU g_hPopupMenu;
 static LPARAM ipc_bigclockinit = -1;
 static ATOM wndclass;
 static HWND hWndBigClock;
-static embedWindowState embed = { 0 };
+static embedWindowState *embed;
 static int upscaling = 1, dsize = 0, no_uninstall = 1,
 		   prevplpos = -1, resetCalc = 0, is_paused = 0,
 		   is_playing = 0, plpos = 0, itemlen = 0;
@@ -165,7 +165,7 @@ void UpdateSkinParts(void) {
 
 	// get the current skin and use that as a
 	// means to control the colouring used
-	wchar_t szBuffer[MAX_PATH] = { 0 };
+	wchar_t szBuffer[MAX_PATH]/* = { 0 }*/;
 	GetCurrentSkin(szBuffer, ARRAYSIZE(szBuffer));
 
 	// attempt to now use the skin override options
@@ -436,7 +436,7 @@ reparse:
 #endif
 		case ID_CONTEXTMENU_ABOUT:
 		{
-			wchar_t message[1024] = { 0 };
+			wchar_t message[1024]/* = { 0 }*/;
 
 			const unsigned char* output = DecompressResourceText(plugin.hDllInstance,
 												  plugin.hDllInstance, IDR_ABOUT_GZ);
@@ -478,7 +478,7 @@ void quit(void) {
 	if (no_uninstall)
 	{
 		/* Update position and size */
-		DestroyEmbeddedWindow(&embed);
+		DestroyEmbeddedWindow(embed);
 	}
 
 	// the wacup core will trigger this
@@ -507,7 +507,7 @@ int init(void) {
 		// TODO add to lang.h
 		/*StartPluginLangOnly(plugin.hDllInstance, embed_guid);
 
-		wchar_t pluginTitleW[256] = { 0 };
+		wchar_t pluginTitleW[256]/* = { 0 }*//*;
 		PrintfCch(pluginTitleW, ARRAYSIZE(pluginTitleW), LangString(IDS_PLUGIN_NAME), TEXT(PLUGIN_VERSION));
 		plugin.description = (char*)SafeWideDup(pluginTitleW);*/
 
@@ -559,15 +559,20 @@ void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 
 			// finally we add menu items to the main right-click menu and the views menu
 			// with Modern skins which support showing the views menu for accessing windows
-			wchar_t lang_string[32] = { 0 };
+			wchar_t lang_string[32]/* = { 0 }*/;
 			AddEmbeddedWindowToMenus(WINAMP_NXS_BIG_CLOCK_MENUID, LngStringCopy(IDS_NXS_BIG_CLOCK_MENU,
 													lang_string, ARRAYSIZE(lang_string)), visible, -1);
 
+			if (!embed)
+			{
+				embed = (embedWindowState*)SafeMalloc(sizeof(embedWindowState));
+			}
+
 			// now we will attempt to create an embedded window which adds its own main menu entry
 			// and related keyboard accelerator (like how the media library window is integrated)
-			embed.flags |= EMBED_FLAGS_SCALEABLE_WND;	// double-size support!
-			hWndBigClock = CreateEmbeddedWindow(&embed, embed_guid, LngStringCopy(IDS_NXS_BIG_CLOCK,
-															  lang_string, ARRAYSIZE(lang_string)));
+			embed->flags |= EMBED_FLAGS_SCALEABLE_WND;	// double-size support!
+			hWndBigClock = CreateEmbeddedWindow(embed, embed_guid, LngStringCopy(IDS_NXS_BIG_CLOCK,
+															 lang_string, ARRAYSIZE(lang_string)));
 
 #ifdef NATIVE_FREEZE
 			/* Subclass skinned window frame but only if it's needed for the window freezing*/
@@ -590,14 +595,11 @@ void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 											   WS_VISIBLE, 0, 0, 0, 0, hWndBigClock, 0, plugin.hDllInstance, 0);
 			}
 
-			// Note: WASABI_API_APP->app_addAccelerators(..) requires Winamp 5.53 and higher
-			//       otherwise if you want to support older clients then you could use the
-			//       IPC_TRANSLATEACCELERATOR callback api which works for v5.0 upto v5.52
 			ACCEL accel = { FVIRTKEY | FALT, 'B', (WORD)WINAMP_NXS_BIG_CLOCK_MENUID };
 			HACCEL hAccel = CreateAcceleratorTable(&accel, 1);
 			if (hAccel)
 			{
-				plugin.app->app_addAccelerators(g_BigClockWnd, &hAccel, 1, TRANSLATE_MODE_GLOBAL);
+				AddAccelerators(g_BigClockWnd, &hAccel, 1, TRANSLATE_MODE_GLOBAL);
 			}
 
 			// Winamp can report if it was started minimised which allows us to control our window
@@ -660,7 +662,6 @@ void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 			plpos = GetPlaylistPosition();
 			itemlen = GetCurrentTrackLengthMilliSeconds();
 
-			KillTimer(g_BigClockWnd, UPDATE_TIMER_ID);
 			SetTimer(g_BigClockWnd, UPDATE_TIMER_ID, UPDATE_TIMER, UpdateWnTimerProc);
 		}
 		// this whole section tests the playback state to determine what is happening
@@ -716,7 +717,7 @@ void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 	// proceedure of the subclass can process it. with multiple windows then this
 	// would need to be duplicated for the number of embedded windows your handling
 	HandleEmbeddedWindowWinampWindowMessages(hWndBigClock, WINAMP_NXS_BIG_CLOCK_MENUID,
-											 &embed, hWnd, uMsg, wParam, lParam);
+													embed, hWnd, uMsg, wParam, lParam);
 }
 
 int GetFormattedTime(LPWSTR lpszTime, const UINT size, const int64_t iPos, const int mode) {
@@ -784,11 +785,12 @@ int GetFormattedTime(LPWSTR lpszTime, const UINT size, const int64_t iPos, const
 
 DWORD WINAPI CalcLengthThread(LPVOID lp)
 {
+	wchar_t buffer[FILENAME_SIZE]/* = { 0 }*/;
+	basicFileInfoStructW bfi = { 0, 0, -1, NULL, 0 };
 startCalc:
 	if (!lp) {
 		for (int i=0;i<plpos;i++) {
-			basicFileInfoStructW bfi = { 0, 0, -1, NULL, 0 };
-			bfi.filename = GetPlaylistItemFile(i, NULL);
+			bfi.filename = GetPlaylistItemFile(i, NULL, buffer, ARRAYSIZE(buffer), NULL);
 			if (bfi.filename && GetBasicFileInfo(&bfi, TRUE, TRUE)) {
 				pltime += bfi.length;
 			}
@@ -800,8 +802,7 @@ startCalc:
 	}
 	else {
 		for (UINT i=plpos;i<pllen;i++) {
-			basicFileInfoStructW bfi = { 0, 0, -1, NULL, 0 };
-			bfi.filename = GetPlaylistItemFile(i, NULL);
+			bfi.filename = GetPlaylistItemFile(i, NULL, buffer, ARRAYSIZE(buffer), NULL);
 			if (bfi.filename && GetBasicFileInfo(&bfi, TRUE, TRUE)) {
 				pltime += bfi.length;
 			}
@@ -856,7 +857,7 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 
 			HACCEL accel = LangAcceleratorTable(IDR_ACCELERATOR_WND);
 			if (accel) {
-				/*WASABI_API_APP*/plugin.app->app_addAccelerators(hWnd, &accel, 1, TRANSLATE_MODE_NORMAL);
+				AddAccelerators(hWnd, &accel, 1, TRANSLATE_MODE_NORMAL);
 			}
 			break;
 		}

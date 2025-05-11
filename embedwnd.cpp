@@ -69,8 +69,8 @@ void DestroyEmbeddedWindow(embedWindowState* embedWindow)
 	// skip saving the current window position otherwise
 	// we have the issue with windows being in the wrong
 	// places after modern -> exit -> modern -> classic
-	if (!embedWindow->wasabi_window &&
-		!EqualRect(&initial[0], &embedWindow->r))
+	if (embedWindow && !embedWindow->wasabi_window &&
+			!EqualRect(&initial[0], &embedWindow->r))
 	{
 		SaveNativeIniInt(WINAMP_INI, INI_FILE_SECTION, L"config_x", embedWindow->r.left);
 		SaveNativeIniInt(WINAMP_INI, INI_FILE_SECTION, L"config_y", embedWindow->r.top);
@@ -107,7 +107,7 @@ void DestroyEmbeddedWindow(embedWindowState* embedWindow)
 			AddItemToMenu2(main_menu, menuId, menuString, (prior_item + 1), TRUE);
 			CheckMenuItem(main_menu, menuId, MF_BYCOMMAND |
 						  (((setVisible == -1) ? visible : setVisible) ?
-							  MF_CHECKED : MF_UNCHECKED));
+											MF_CHECKED : MF_UNCHECKED));
 		}
 	}
 	else
@@ -236,7 +236,7 @@ void HandleEmbeddedWindowWinampWindowMessages(HWND embedWnd, UINT_PTR menuId, em
 		}
 		else if (LOWORD(wParam) == WINAMP_REFRESHSKIN)
 		{
-			if (!GetParent(embedWnd))
+			if (!GetParent(embedWnd) && embedWindow)
 			{
 				width = (embedWindow->r.right - embedWindow->r.left);
 				height = (embedWindow->r.bottom - embedWindow->r.top);
