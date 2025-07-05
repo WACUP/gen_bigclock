@@ -34,7 +34,7 @@
 
 //#define USE_COMCTL_DRAWSHADOWTEXT
 
-#define PLUGIN_VERSION "1.17.2"
+#define PLUGIN_VERSION "1.17.4"
 
 #include <windows.h>
 #include <windowsx.h>
@@ -166,7 +166,7 @@ void UpdateSkinParts(void) {
 	// get the current skin and use that as a
 	// means to control the colouring used
 	wchar_t szBuffer[MAX_PATH]/* = { 0 }*/;
-	GetCurrentSkin(szBuffer, ARRAYSIZE(szBuffer));
+	GetCurrentSkin(szBuffer, ARRAYSIZE(szBuffer), NULL);
 
 	// attempt to now use the skin override options
 	// which are provided in a waveseek.txt within
@@ -174,8 +174,7 @@ void UpdateSkinParts(void) {
 	if (szBuffer[0])
 	{
 		// look for the file that classic skins could provide
-		AppendOnPath(szBuffer, L"bigclock.txt");
-		if (FileExists(szBuffer)) {
+		if (FileExists(AppendOnPath(szBuffer, L"bigclock.txt"))) {
 			clrBackground = GetPrivateProfileHex(L"colours", L"background", clrBackground, szBuffer);
 			clrTimerText = GetPrivateProfileHex(L"colours", L"timertext", clrTimerText, szBuffer);
 			clrTimerTextShadow = GetPrivateProfileHex(L"colours", L"timertextshadow", clrTimerTextShadow, szBuffer);
