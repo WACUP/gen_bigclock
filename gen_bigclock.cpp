@@ -41,7 +41,6 @@
 #include <commctrl.h>
 #include <shellapi.h>
 #include <commdlg.h>
-#include <strsafe.h>
 #include <math.h>
 
 #include <winamp/gen.h>
