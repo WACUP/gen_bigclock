@@ -34,7 +34,7 @@
 
 //#define USE_COMCTL_DRAWSHADOWTEXT
 
-#define PLUGIN_VERSION "1.17.4"
+#define PLUGIN_VERSION "1.18"
 
 #include <windows.h>
 #include <windowsx.h>
@@ -747,7 +747,9 @@ int GetFormattedTime(LPWSTR lpszTime, const UINT size, const int64_t iPos, const
 		FormattedTimeString(lpszTime, size, (int)(!mode ? (iPos / 1000LL) :
 										ceil(iPos/1000.f)), 0, &remaining);
 		if (!*lpszTime)	{
-			len = (int)CopyCchStrEx(lpszTime, size, L"0:00");
+			// if there's no length for the item then showing 0:00 is weird so
+			// we'll avoid doing that which for time remaining is less jarring
+			len = (itemlen > 0 ? (int)CopyCchStrEx(lpszTime, size, L"0:00") : 0);
 		}
 		else {
 			len = (int)(size - remaining);
@@ -773,7 +775,7 @@ int GetFormattedTime(LPWSTR lpszTime, const UINT size, const int64_t iPos, const
 		}
 	}
 
-	if (!mode && config_centi) {
+	if (!mode && config_centi && (len > 0)) {
 		const wchar_t szMsFmt[] = L".%.2d";
 		len += (int)PrintfCch((lpszTime + len), (size - len), szMsFmt, dsec);
 	}
@@ -1046,7 +1048,8 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 	case WM_ERASEBKGND:
 		{
 			RECT r = { 0 };
-			wchar_t szTime[256] = { 0 };
+			wchar_t szTime[256]/* = { 0 }*/;
+			szTime[0] = 0;
 
 			int64_t pos = 0; // The position we display in our big clock
 			int dwDisplayMode = 0;
