@@ -34,7 +34,7 @@
 
 //#define USE_COMCTL_DRAWSHADOWTEXT
 
-#define PLUGIN_VERSION "1.18"
+#define PLUGIN_VERSION "1.18.1"
 
 #include <windows.h>
 #include <windowsx.h>
@@ -1371,8 +1371,10 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 					{
 						SafeFree(lpszDisplayMode);
 					}
-					lpszDisplayMode = LngStringDup(dwDisplayMode);
-					lpszDisplayModeLen = (int)wcslen(lpszDisplayMode);
+
+					size_t dwDisplayModeLen = 0;
+					lpszDisplayMode = LngStringDupGetLen(dwDisplayMode, &dwDisplayModeLen);
+					lpszDisplayModeLen = (int)dwDisplayModeLen;
 
 					dwLastDisplayMode = dwDisplayMode;
 				}
