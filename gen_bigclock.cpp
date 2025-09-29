@@ -34,7 +34,7 @@
 
 //#define USE_COMCTL_DRAWSHADOWTEXT
 
-#define PLUGIN_VERSION "1.18.1"
+#define PLUGIN_VERSION "1.18.2"
 
 #include <windows.h>
 #include <windowsx.h>
@@ -568,7 +568,8 @@ void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 
 			// now we will attempt to create an embedded window which adds its own main menu entry
 			// and related keyboard accelerator (like how the media library window is integrated)
-			embed->flags |= EMBED_FLAGS_SCALEABLE_WND;	// double-size support!
+			embed->flags |= EMBED_FLAGS_SCALEABLE_WND |	// double-size support!
+						 EMBED_FLAGS_REDRAW_ON_MOVING;	// redraw whilst moving so we keep updating
 			hWndBigClock = CreateEmbeddedWindow(embed, embed_guid, LngStringCopy(IDS_NXS_BIG_CLOCK,
 															 lang_string, ARRAYSIZE(lang_string)));
 
@@ -892,7 +893,7 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 		break;
 	case WM_LBUTTONUP:
 		// go forwards or backwards through the options depending on the shift state
-		if (!(GetKeyState(VK_SHIFT) & 0x1000)) {
+		if (!ShiftDown()) {
 			if (config_displaymode>=NXSBCDM_MAX) {
 				config_displaymode = 0;
 			}
