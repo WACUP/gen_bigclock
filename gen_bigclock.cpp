@@ -34,7 +34,7 @@
 
 //#define USE_COMCTL_DRAWSHADOWTEXT
 
-#define PLUGIN_VERSION "1.18.2"
+#define PLUGIN_VERSION "1.18.3"
 
 #include <windows.h>
 #include <windowsx.h>
