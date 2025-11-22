@@ -34,7 +34,7 @@
 
 //#define USE_COMCTL_DRAWSHADOWTEXT
 
-#define PLUGIN_VERSION "1.18.3"
+#define PLUGIN_VERSION "1.18.4"
 
 #include <windows.h>
 #include <windowsx.h>
@@ -390,15 +390,15 @@ bool ProcessMenuResult(WPARAM command, HWND parent) {
 				}
 
 reparse:
-				wchar_t buf[32] = {0};
-				I2WStr((!mode ? lfDisplay.lfHeight : lfMode.lfHeight), buf, ARRAYSIZE(buf));
-				SaveNativeIniString(WINAMP_INI, PLUGIN_INISECTION, (!mode ? L"df_h" : L"mf_h"), buf);
+				wchar_t buf[32]/* = { 0 }*/;
+				SaveNativeIniString(WINAMP_INI, PLUGIN_INISECTION, (!mode ? L"df_h" : L"mf_h"),
+				  I2WStr((!mode ? lfDisplay.lfHeight : lfMode.lfHeight), buf, ARRAYSIZE(buf)));
 
-				I2WStr((!mode ? lfDisplay.lfItalic : lfMode.lfItalic), buf, ARRAYSIZE(buf));
-				SaveNativeIniString(WINAMP_INI, PLUGIN_INISECTION, (!mode ? L"df_i" : L"mf_i"), buf);
+				SaveNativeIniString(WINAMP_INI, PLUGIN_INISECTION, (!mode ? L"df_i" : L"mf_i"),
+				  I2WStr((!mode ? lfDisplay.lfItalic : lfMode.lfItalic), buf, ARRAYSIZE(buf)));
 
-				I2WStr((!mode ? lfDisplay.lfWeight : lfMode.lfWeight), buf, ARRAYSIZE(buf));
-				SaveNativeIniString(WINAMP_INI, PLUGIN_INISECTION, (!mode ? L"df_b" : L"mf_b"), buf);
+				SaveNativeIniString(WINAMP_INI, PLUGIN_INISECTION, (!mode ? L"df_b" : L"mf_b"),
+				  I2WStr((!mode ? lfDisplay.lfWeight : lfMode.lfWeight), buf, ARRAYSIZE(buf)));
 
 				SaveNativeIniString(WINAMP_INI, PLUGIN_INISECTION, (!mode ? L"df" : L"mf"),
 									(!mode ? lfDisplay.lfFaceName : lfMode.lfFaceName));
@@ -1177,7 +1177,7 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 					break;
 				case NXSBCDM_TIMEOFDAY:
 					{
-						SYSTEMTIME st = { 0 };
+						SYSTEMTIME st/* = { 0 }*/;
 						GetLocalTime(&st);
 						pos = (int64_t)((st.wHour * 60 * 60) + (st.wMinute * 60) +
 											st.wSecond) * 1000 + st.wMilliseconds;
@@ -1186,7 +1186,7 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 					break;
 				case NXSBCDM_BEATSTIME:
 					{
-						SYSTEMTIME st = { 0 };
+						SYSTEMTIME st/* = { 0 }*/;
 						GetSystemTime(&st);
 						// need to convert this to be UTC+1 & account
 						// for the wrapping of the time from the UTC
@@ -1380,9 +1380,11 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 					dwLastDisplayMode = dwDisplayMode;
 				}
 
-				SIZE s = { 0 };
-				GetTextExtentPoint32(cacheDC, lpszDisplayMode, lpszDisplayModeLen, &s);
-				TextOut(cacheDC, 0, (r.bottom - s.cy), lpszDisplayMode, lpszDisplayModeLen);
+				SIZE s/* = { 0 }*/;
+				if (GetTextExtentPoint32(cacheDC, lpszDisplayMode, lpszDisplayModeLen, &s))
+				{
+					TextOut(cacheDC, 0, (r.bottom - s.cy), lpszDisplayMode, lpszDisplayModeLen);
+				}
 			}
 
 			BitBlt(hdcwnd, r.left, r.top, r.right, r.bottom, cacheDC, 0, 0, SRCCOPY);
