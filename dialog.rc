@@ -157,7 +157,7 @@ BEGIN
             VALUE "FileDescription", "General Purpose Plug-in"
             VALUE "FileVersion", "1.18.4.0"
             VALUE "InternalName", "gen_bigclock.dll"
-            VALUE "LegalCopyright", "Copyright © 2004-5 Saivert, Updated by Sebastian Pipping (2006), Addtional updates by Darren Owen aka DrO (2016-2025)"
+            VALUE "LegalCopyright", "Copyright © 2004-2005 Saivert, Updated by Sebastian Pipping (2006), Addtional updates by Darren Owen aka DrO (2016-2026)"
             VALUE "OriginalFilename", "gen_bigclock.dll"
             VALUE "ProductName", "Big Clock"
             VALUE "ProductVersion", "1.18.4.0"
