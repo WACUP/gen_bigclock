@@ -34,7 +34,7 @@
 
 //#define USE_COMCTL_DRAWSHADOWTEXT
 
-#define PLUGIN_VERSION "1.18.4"
+#define PLUGIN_VERSION "1.18.6"
 
 #include <windows.h>
 #include <windowsx.h>
@@ -590,16 +590,12 @@ void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 			wndclass = RegisterClassEx(&wcex);
 			if (wndclass)
 			{
-				g_BigClockWnd = CreateWindowEx(WS_EX_NOPARENTNOTIFY, (LPCTSTR)wndclass, szAppName, WS_CHILD |
+				g_BigClockWnd = CreateWindowEx(WS_EX_NOPARENTNOTIFY, MAKEINTATOM(wndclass), szAppName, WS_CHILD |
 											   WS_VISIBLE, 0, 0, 0, 0, hWndBigClock, 0, plugin.hDllInstance, 0);
 			}
 
 			ACCEL accel = { FVIRTKEY | FALT, 'B', (WORD)WINAMP_NXS_BIG_CLOCK_MENUID };
-			HACCEL hAccel = CreateAcceleratorTable(&accel, 1);
-			if (hAccel)
-			{
-				AddAccelerators(g_BigClockWnd, &hAccel, 1, TRANSLATE_MODE_GLOBAL);
-			}
+			AddAccelerators(NULL, NULL, 0, g_BigClockWnd, &accel, 1, TRANSLATE_MODE_GLOBAL);
 
 			// Winamp can report if it was started minimised which allows us to control our window
 			// to not properly show on startup otherwise the window will appear incorrectly when it
@@ -856,10 +852,8 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 				UpdateSkinParts();
 			}
 
-			HACCEL accel = LangAcceleratorTable(IDR_ACCELERATOR_WND);
-			if (accel) {
-				AddAccelerators(hWnd, &accel, 1, TRANSLATE_MODE_NORMAL);
-			}
+			AddAccelerators(WASABI_API_LNG_HINST, WASABI_API_ORIG_HINST, IDR_ACCELERATOR_WND,
+													   hWnd, NULL, 1, TRANSLATE_MODE_NORMAL);
 			break;
 		}
 	case WM_CLOSE:
