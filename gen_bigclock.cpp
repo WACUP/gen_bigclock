@@ -34,7 +34,7 @@
 
 //#define USE_COMCTL_DRAWSHADOWTEXT
 
-#define PLUGIN_VERSION "1.18.6"
+#define PLUGIN_VERSION "1.18.7"
 
 #include <windows.h>
 #include <windowsx.h>
@@ -1201,7 +1201,7 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 			}
 			
 			if (config_displaymode != NXSBCDM_DISABLED) {
-				int len = (!szTime[0] ? (int)GetFormattedTime(szTime, ARRAYSIZE(szTime), pos,
+				int len = (!szTime[0] ? GetFormattedTime(szTime, ARRAYSIZE(szTime), pos,
 						  (config_displaymode == NXSBCDM_TIMEOFDAY) ? 1 : (((config_displaymode ==
 						  NXSBCDM_REMAININGTIME) && !config_centi) ? 2 : 0)) : (int)wcslen(szTime));
 				const int height = (r.bottom - r.top);
@@ -1213,7 +1213,8 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 					r.left += 5;
 					r.top += 5;
 					SetTextColor(cacheDC, clrTimerTextShadow);
-					DrawTextEx(cacheDC, szTime, len, &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE, NULL);
+					DrawTextEx(cacheDC, szTime, ((len > 0) && (len < SHRT_MAX) ? len :
+							   -1), &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE, NULL);
 
 					// Draw text
 					r.left -= 5;
@@ -1221,7 +1222,8 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 				}
 
 				SetTextColor(cacheDC, clrTimerText);
-				DrawTextEx(cacheDC, szTime, len, &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE, NULL);
+				DrawTextEx(cacheDC, szTime, ((len > 0) && (len < SHRT_MAX) ? len :
+						   -1), &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE, NULL);
 
 				r.top -= height;
 				r.bottom -= height;
