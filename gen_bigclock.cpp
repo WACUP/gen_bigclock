@@ -34,7 +34,7 @@
 
 //#define USE_COMCTL_DRAWSHADOWTEXT
 
-#define PLUGIN_VERSION "1.18.8"
+#define PLUGIN_VERSION "1.19"
 
 #include <windows.h>
 #include <windowsx.h>
@@ -88,9 +88,9 @@ static LPARAM ipc_bigclockinit = -1;
 static ATOM wndclass;
 static HWND hWndBigClock;
 static embedWindowState *embed;
-static int upscaling = 1, dsize = 0, no_uninstall = 1,
-		   prevplpos = -1, resetCalc = 0, is_paused = 0,
-		   is_playing = 0, plpos = 0, itemlen = 0;
+static bool is_playing, is_paused, reset_calc;
+static int upscaling = 1, dsize, no_uninstall = 1,
+		   plpos, prevplpos = -1, itemlen, pllen;
 static HPEN hpenVis;
 static HFONT hfDisplay, hfMode;
 static LOGFONT lfDisplay = { 0 }, lfMode = { 0 };
@@ -98,9 +98,6 @@ static HANDLE CalcThread;
 static int64_t pltime;
 static RECT lastWnd = { 0 };
 static HDC cacheDC, cacheVisDC;
-
-// just using these to track the paused and playing states
-UINT pllen = 0;
 
 COLORREF clrBackground = RGB(0, 0, 0),
 		 clrTimerText = RGB(0, 255, 0),
@@ -617,7 +614,7 @@ void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 			// can happen, it's possible to not catch the play event.
 			const int playing = GetPlayingState();
 			is_paused = (playing == 3);
-			is_playing = (playing == 1 || is_paused);
+			is_playing = ((playing == 1) || !!is_paused);
 
 			pllen = GetPlaylistLength();
 			plpos = GetPlaylistPosition();
@@ -649,8 +646,8 @@ void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 		else if (lParam == IPC_PLAYING_FILEW ||
 				 lParam == IPC_PLAYLIST_ITEM_REMOVED) {
 			if (lParam == IPC_PLAYING_FILEW) {
-				is_paused = 0;
-				is_playing = 1;
+				is_paused = false;
+				is_playing = true;
 			}
 
 			pllen = GetPlaylistLength();
@@ -664,7 +661,7 @@ void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 			const int cur_playing = GetPlayingState();
 			if ((cur_playing == 1) && (GetCurrentTrackPos() >= 0)) {
 				if (is_paused) {
-					is_paused = 0;
+					is_paused = false;
 					SetTimer(g_BigClockWnd, UPDATE_TIMER_ID, (!config_vismode &&
 							 (config_displaymode == NXSBCDM_TIMEOFDAY) ||
 							 (config_displaymode == NXSBCDM_BEATSTIME) ? (config_centi ?
@@ -672,7 +669,7 @@ void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 				}
 			}
 			else if (cur_playing == 3) {
-				is_paused = 1;
+				is_paused = true;
 				if ((config_displaymode != NXSBCDM_TIMEOFDAY) &&
 					(config_displaymode != NXSBCDM_BEATSTIME)) {
 					// we'll let it keep running otherwise view
@@ -684,7 +681,7 @@ void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 				}
 			}
 			else if (!cur_playing && (is_playing == 1)) {
-				is_playing = is_paused = 0;
+				is_playing = is_paused = false;
 				if ((config_displaymode != NXSBCDM_TIMEOFDAY) &&
 					(config_displaymode != NXSBCDM_BEATSTIME)) {
 					KillTimer(g_BigClockWnd, UPDATE_TIMER_ID);
@@ -703,7 +700,7 @@ void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 				// things are loading & trying to resume playback
 				// which without this may prevent the vis running
 				is_paused = (cur_playing == 3);
-				is_playing = (cur_playing == 1 || is_paused);
+				is_playing = ((cur_playing == 1) || !!is_paused);
 			}
 		}
 	}
@@ -785,33 +782,19 @@ DWORD WINAPI CalcLengthThread(LPVOID lp)
 	wchar_t buffer[FILENAME_SIZE]/* = { 0 }*/;
 	basicFileInfoStructW bfi = { 0, 0, -1, NULL, 0 };
 startCalc:
-	if (!lp) {
-		for (int i=0;i<plpos;i++) {
-			bfi.filename = GetPlaylistItemFile(i, NULL, buffer, ARRAYSIZE(buffer), NULL);
-			if (bfi.filename && GetBasicFileInfo(&bfi, TRUE, TRUE)) {
-				pltime += bfi.length;
-			}
-
-			if (resetCalc) {
-				break;
-			}
+	for (int i = (!lp ? 0 : plpos); i < (!lp ? plpos : pllen); i++){
+		bfi.filename = GetPlaylistItemFile(i, NULL, buffer, ARRAYSIZE(buffer), NULL);
+		if (bfi.filename && GetBasicFileInfo(&bfi, TRUE, TRUE, i)) {
+			pltime += bfi.length;
 		}
-	}
-	else {
-		for (UINT i=plpos;i<pllen;i++) {
-			bfi.filename = GetPlaylistItemFile(i, NULL, buffer, ARRAYSIZE(buffer), NULL);
-			if (bfi.filename && GetBasicFileInfo(&bfi, TRUE, TRUE)) {
-				pltime += bfi.length;
-			}
 
-			if (resetCalc) {
-				break;
-			}
+		if (reset_calc) {
+			break;
 		}
 	}
 
-	if (resetCalc) {
-		resetCalc = 0;
+	if (reset_calc) {
+		reset_calc = false;
 		goto startCalc;
 	}
 
@@ -825,7 +808,7 @@ startCalc:
 	if (CalcThread)
 	{
 		CloseHandle(CalcThread);
-		CalcThread = 0;
+		CalcThread = NULL;
 	}
 	return 0;
 }
@@ -860,7 +843,10 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 		// prevent closing the skinned frame from destroying this window
 		return 1;
 	case WM_DESTROY:
-		WaitForThreadToClose(&CalcThread, INFINITE);
+		if (CalcThread)
+		{
+			WaitForThreadToClose(&CalcThread, INFINITE);
+		}
 
 		if (hpenVis) {
 			DeleteObject(hpenVis);
@@ -1119,54 +1105,36 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 					}
 					break;
 				case NXSBCDM_PLELAPSED:
+				case NXSBCDM_PLREMAINING:
 					{
+						const bool remaining = (config_displaymode == NXSBCDM_PLREMAINING);
 						// Only do this when song has changed, since the code encapsulated by this
 						// if clause is very time consuming if the playlist is large.
 						if (plpos != prevplpos) {
 							prevplpos = plpos;
 
-							// Get combined duration of all songs up to (but not including) the current song
+							// Get combined duration of all songs up to (but not
+							// including) or from and including the current song
 							pltime = 0;
-							LngStringCopy(IDS_CALCULATING, szTime, ARRAYSIZE(szTime));
 
 							if (!CheckThreadHandleIsValid(&CalcThread)) {
-								CalcThread = StartThread(CalcLengthThread, 0, THREAD_PRIORITY_LOWEST, 0, NULL);
+								CalcThread = StartThread(CalcLengthThread, (LPVOID)remaining,
+															THREAD_PRIORITY_LOWEST, 0, NULL);
 							}
 							else {
-								resetCalc = 1;
+								reset_calc = true;
 							}
 						}
 
 						// Add elapsed time of current song and store result in pos
-						pos = (pltime + GetCurrentTrackPos());
-						dwDisplayMode = IDS_PLAYLIST_ELAPSED;
-					}
-					break;
-				case NXSBCDM_PLREMAINING:
-					{
-						// Only do this when song has changed, since the code encapsulated by this
-						// if clause is very time consuming if the playlist is large.
-						if (plpos != prevplpos) {
-							prevplpos = plpos;
-
-							// Get combined duration of all songs from and including the current song to end of list
-							pltime = 0;
-							LngStringCopy(IDS_CALCULATING, szTime, ARRAYSIZE(szTime));
-
-							if (!CheckThreadHandleIsValid(&CalcThread)) {
-								CalcThread = StartThread(CalcLengthThread, 0, THREAD_PRIORITY_LOWEST, 0, NULL);
-							}
-							else {
-								resetCalc = 1;
-							}
-						}
-
+						// or
 						// Subtract elapsed time of current song and store result in pos
 						// though this will do some rounding as needed to account for it
 						// being 'off' if only whole seconds are being shown compared to
 						// centiseconds so it should match the classic skin main window.
-						pos = (pltime - GetCurrentTrackPos());
-						dwDisplayMode = IDS_PLAYLIST_REMAINING;
+						pos = (!remaining ? (pltime + GetCurrentTrackPos()) :
+											(pltime - GetCurrentTrackPos()));
+						dwDisplayMode = (!remaining ? IDS_PLAYLIST_ELAPSED : IDS_PLAYLIST_REMAINING);
 					}
 					break;
 				case NXSBCDM_TIMEOFDAY:
@@ -1199,11 +1167,25 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 					}
 					break;
 			}
-			
+
 			if (config_displaymode != NXSBCDM_DISABLED) {
-				int len = (!szTime[0] ? GetFormattedTime(szTime, ARRAYSIZE(szTime), pos,
-						  (config_displaymode == NXSBCDM_TIMEOFDAY) ? 1 : (((config_displaymode ==
-						  NXSBCDM_REMAININGTIME) && !config_centi) ? 2 : 0)) : (int)wcslen(szTime));
+				int len;				
+			
+				if (CalcThread && ((dwDisplayMode == IDS_PLAYLIST_ELAPSED) ||
+								  (dwDisplayMode == IDS_PLAYLIST_REMAINING)))
+				{
+					size_t copied = 0;
+					LngStringCopyGetLen(IDS_CALCULATING, szTime, ARRAYSIZE(szTime), &copied);
+					len = (int)copied;
+				}
+				else
+				{
+					len = (!szTime[0] ? GetFormattedTime(szTime, ARRAYSIZE(szTime),
+						   pos, (config_displaymode == NXSBCDM_TIMEOFDAY) ? 1 :
+						   (((config_displaymode == NXSBCDM_REMAININGTIME) &&
+						   !config_centi) ? 2 : 0)) : (int)wcslen(szTime));
+				}
+
 				const int height = (r.bottom - r.top);
 				r.top += height;
 				r.bottom += height;
