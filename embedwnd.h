@@ -11,7 +11,8 @@
 
 // you can change these values for the section name to store/access the settings
 // from winamp.ini and also for the property set when starting Winamp minimised.
-#define INI_FILE_SECTION L"NxS BigClock"
+extern wchar_t szAppName[16];
+#define INI_FILE_SECTION szAppName/*/L"NxS BigClock"/**/
 #define MINIMISED_FLAG L"NXSBGMinMode"
 
 // these functions deal with creating the embedded window and relevant menus, etc

@@ -34,7 +34,7 @@
 
 //#define USE_COMCTL_DRAWSHADOWTEXT
 
-#define PLUGIN_VERSION "1.19"
+#define PLUGIN_VERSION "1.20"
 
 #include <windows.h>
 #include <windowsx.h>
@@ -60,7 +60,7 @@
 #include "resource.h"
 
 /* global data */
-static const wchar_t szAppName[] = L"NxS BigClock";
+wchar_t szAppName[16] = { L"NxS BigClock" };
 #define PLUGIN_INISECTION szAppName
 
 // Menu ID's
@@ -81,14 +81,14 @@ UINT WINAMP_NXS_BIG_CLOCK_MENUID = (ID_GENFF_LIMIT+101);
 
 /* BigClock window */
 static HWND g_BigClockWnd;
-static wchar_t g_BigClockClassName[] = L"NxSBigClockWnd";
+static wchar_t g_BigClockClassName[16] = { L"NxSBigClockWnd" };
 LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 static HMENU g_hPopupMenu;
 static LPARAM ipc_bigclockinit = -1;
 static ATOM wndclass;
 static HWND hWndBigClock;
 static embedWindowState *embed;
-static bool is_playing, is_paused, reset_calc;
+static bool is_playing, is_paused, reset_calc, second_instance;
 static int upscaling = 1, dsize, no_uninstall = 1,
 		   plpos, prevplpos = -1, itemlen, pllen;
 static HPEN hpenVis;
@@ -134,7 +134,6 @@ void config(void);
 void quit(void);
 int init(void);
 
-
 void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 						 WPARAM wParam, const LPARAM lParam);
 
@@ -152,6 +151,10 @@ SETUP_API_LNG_VARS;
 // {DF6F9C93-155C-4d01-BF5A-17612EDBFC4C}
 static const GUID embed_guid = 
 { 0xdf6f9c93, 0x155c, 0x4d01, { 0xbf, 0x5a, 0x17, 0x61, 0x2e, 0xdb, 0xfc, 0x4c } };
+
+// {9D0B7956-A8B9-4db1-A193-F8066D54723E}
+static const GUID embed_guid_2 =
+{ 0x9d0b7956, 0xa8b9, 0x4db1, { 0xa1, 0x93, 0xf8, 0x6, 0x6d, 0x54, 0x72, 0x3e } };
 
 void UpdateSkinParts(void) {
 
@@ -506,12 +509,25 @@ int init(void) {
 		PrintfCch(pluginTitleW, ARRAYSIZE(pluginTitleW), LangString(IDS_PLUGIN_NAME), TEXT(PLUGIN_VERSION));
 		plugin.description = (char*)SafeWideDup(pluginTitleW);*/
 
-		StartPluginLangWithDesc(plugin.hDllInstance, embed_guid, IDS_PLUGIN_NAME,
-									  TEXT(PLUGIN_VERSION), &plugin.description);
+		wchar_t fileName[MAX_PATH];
+		if (GetModuleFileName(plugin.hDllInstance, fileName, ARRAYSIZE(fileName)))
+		{
+			LPCWSTR fn = FindPathFileName(fileName, nullptr);
+			if (fn && !FastCompare(fn, L"gen_bigclock2.dll"))
+			{
+				CatCchStr(szAppName, ARRAYSIZE(szAppName), L" 2");
+				CatCchStr(g_BigClockClassName, ARRAYSIZE(g_BigClockClassName), L"2");
+
+				second_instance = true;
+			}
+		}
+
+		StartPluginLangWithDesc(plugin.hDllInstance, (!second_instance ? embed_guid : embed_guid_2),
+										IDS_PLUGIN_NAME, TEXT(PLUGIN_VERSION), &plugin.description);
 
 		// wParam must have something provided else it returns 0
 		// and then acts like a IPC_GETVERSION call... not good!
-		ipc_bigclockinit = RegisterIPC((WPARAM)&"NXSBC_IPC");
+		ipc_bigclockinit = RegisterIPC((!second_instance ? (WPARAM)&"NXSBC_IPC" : (WPARAM)&"NXSBC2_IPC"));
 		PostMessage(plugin.hwndParent, WM_WA_IPC, 0, ipc_bigclockinit);
 
 		return GEN_INIT_SUCCESS;
@@ -555,8 +571,13 @@ void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 			// finally we add menu items to the main right-click menu and the views menu
 			// with Modern skins which support showing the views menu for accessing windows
 			wchar_t lang_string[32]/* = { 0 }*/;
-			AddEmbeddedWindowToMenus(WINAMP_NXS_BIG_CLOCK_MENUID, LngStringCopy(IDS_NXS_BIG_CLOCK_MENU,
-													lang_string, ARRAYSIZE(lang_string)), visible, -1);
+			size_t lang_string_len = 0;
+			LngStringCopyGetLen(IDS_NXS_BIG_CLOCK_MENU, lang_string, ARRAYSIZE(lang_string), &lang_string_len);
+			if (second_instance)
+			{
+				lang_string[lang_string_len - 1] = L'D';
+			}
+			AddEmbeddedWindowToMenus(WINAMP_NXS_BIG_CLOCK_MENUID, lang_string, visible, -1);
 
 			if (!embed)
 			{
@@ -567,8 +588,8 @@ void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 			// and related keyboard accelerator (like how the media library window is integrated)
 			embed->flags |= EMBED_FLAGS_SCALEABLE_WND |	// double-size support!
 						 EMBED_FLAGS_REDRAW_ON_MOVING;	// redraw whilst moving so we keep updating
-			hWndBigClock = CreateEmbeddedWindow(embed, embed_guid, LngStringCopy(IDS_NXS_BIG_CLOCK,
-															 lang_string, ARRAYSIZE(lang_string)));
+			hWndBigClock = CreateEmbeddedWindow(embed, (!second_instance ? embed_guid : embed_guid_2),
+							   LngStringCopy(IDS_NXS_BIG_CLOCK, lang_string, ARRAYSIZE(lang_string)));
 
 #ifdef NATIVE_FREEZE
 			/* Subclass skinned window frame but only if it's needed for the window freezing*/
@@ -591,7 +612,8 @@ void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 											   WS_VISIBLE, 0, 0, 0, 0, hWndBigClock, 0, plugin.hDllInstance, 0);
 			}
 
-			ACCEL accel = { FVIRTKEY | FALT, 'B', (WORD)WINAMP_NXS_BIG_CLOCK_MENUID };
+			ACCEL accel = { FVIRTKEY | FALT, (WORD)(!second_instance ? 'B' :
+								  'D'), (WORD)WINAMP_NXS_BIG_CLOCK_MENUID };
 			AddAccelerators(NULL, NULL, 0, g_BigClockWnd, &accel, 1, TRANSLATE_MODE_GLOBAL);
 
 			// Winamp can report if it was started minimised which allows us to control our window
