@@ -34,7 +34,7 @@
 
 //#define USE_COMCTL_DRAWSHADOWTEXT
 
-#define PLUGIN_VERSION "1.20"
+#define PLUGIN_VERSION "1.20.1"
 
 #include <windows.h>
 #include <windowsx.h>
@@ -737,8 +737,7 @@ void __cdecl MessageProc(HWND hWnd, const UINT uMsg, const
 int GetFormattedTime(LPWSTR lpszTime, const UINT size, const int64_t iPos, const int mode) {
 
 	double time_s = (iPos > 0 ? iPos*0.001 : 0);
-	/*int days = (int)(time_s / 86400);
-	time_s -= (days * 60 * 60 * 24);*/
+
 	int hours = (int)(time_s / 3600) % 60;
 	time_s -= (hours*3600);
 	int minutes = (int)(time_s/60);
@@ -761,11 +760,11 @@ int GetFormattedTime(LPWSTR lpszTime, const UINT size, const int64_t iPos, const
 		}/*/
 		size_t remaining = size;
 		FormattedTimeString(lpszTime, size, (int)(!mode ? (iPos / 1000LL) :
-										ceil(iPos/1000.f)), 0, &remaining);
+									   ceilf(iPos/1000.f)), 0, &remaining);
 		if (!*lpszTime)	{
 			// if there's no length for the item then showing 0:00 is weird so
 			// we'll avoid doing that which for time remaining is less jarring
-			len = (itemlen > 0 ? (int)CopyCchStrEx(lpszTime, size, L"0:00") : 0);
+			len = ((itemlen > 0) || (iPos > 0) ? (int)CopyCchStrEx(lpszTime, size, L"0:00") : 0);
 		}
 		else {
 			len = (int)(size - remaining);
@@ -1269,9 +1268,9 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 					/* Render the oscilloscope */
 					if ((config_vismode & NXSBCVM_OSC) == NXSBCVM_OSC) {
 						// this is not 'exact' but it'll do for the moment
-						const int interval = (int)ceil(rVis.right / 75.0f),
+						const int interval = (int)ceilf(rVis.right / 75.0f),
 								  top = (height / 2),
-								  scaling = (int)ceil((top + 40) / 40.0f);
+								  scaling = (int)ceilf((top + 40) / 40.0f);
 
 						// start at the correct initial position so there isn't
 						// a partial line drawn from the centre line up to that
@@ -1297,8 +1296,8 @@ LRESULT CALLBACK BigClockWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 						static char sapeaks[150], safalloff[150], sapeaksdec[150];
 
 						// this is not 'exact' but it'll do for the moment
-						const int interval = (int)ceil(rVis.right / 75.0f),
-								  scaling = (int)ceil((height - 40) / 40.0f);
+						const int interval = (int)ceilf(rVis.right / 75.0f),
+								  scaling = (int)ceilf((height - 40) / 40.0f);
 						for (int x = 0; x < 75; x++)
 						{
 							if (!is_paused)
